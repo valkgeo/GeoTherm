@@ -6,7 +6,7 @@ GeoTherm is a Python-based software designed for modeling the thermal effects of
 
 - Analytical solutions for heat conduction equations in infinite media.
 - Applicable to simple geometric shapes such as planes, cylinders, and spheres.
-- Considers temperature-dependent thermal properties and latent heat inclusion.
+- Considers temperature-dependent petrophysical properties (density, thermal conductivity and thermal diffusivity).
 - Detailed thermal analysis of magmatic cooling and its impacts on adjacent rocks.
 
 ## Installation
