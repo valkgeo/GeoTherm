@@ -62,4 +62,4 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 ## Contact
 
-For any questions or further information, please contact [Samir do Nascimento Valcácio] at [samir.valcacio@ufrr.br].
+For any questions or further information, please contact at [samir.valcacio@ufrr.br].
