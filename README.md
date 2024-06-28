@@ -23,11 +23,15 @@ pip install -r requirements.txt
 
 To use GeoTherm, follow the instructions below:
 
-1. Prepare your input data and configuration files.
-2. Run the main script with the necessary parameters:
+1. Run the main script with the necessary parameters:
     ```bash
-    python main.py --input your_input_file --config your_config_file
+    python main.py
     ```
+2. Use the graphical user interface (GUI) to perform the following actions:
+ - Enter Input Data: Click on the "Enter Input Data" button to input the necessary data for thermal modeling.
+ - Run Thermal Model: Once the input data is provided, click on the "Run Thermal Model" button to perform the thermal modeling.
+ - Visualize Results: After running the model, click on the "Visualize Results" button to view the results of the thermal modeling.
+   
 ## Case Studies
 
 ### Case Study 1: Planar Plutonic Intrusion
