@@ -78,6 +78,15 @@ class MainWindow(QMainWindow):
         open_action.triggered.connect(self.openFile)
         file_menu.addAction(open_action)
 
+        resume_action = QAction("Resume", self)
+        resume_action.triggered.connect(self.show_resume)
+        file_menu.addAction(resume_action)
+
+        exit_action = QAction("Exit", self)
+        exit_action.setShortcut("Ctrl+Q")
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(exit_action)
+
         help_action = QAction("View README on GitHub", self)
         help_action.triggered.connect(self.viewReadme)
         help_menu.addAction(help_action)
@@ -85,11 +94,14 @@ class MainWindow(QMainWindow):
     def enterInputData(self):
         geometry_dialog = GeometrySelectionDialog()
         if geometry_dialog.exec():
-            geometry = geometry_dialog.get_geometry()
+            geometry, d, id_ = geometry_dialog.get_geometry_and_d()
             parameter_dialog = ParameterInputDialog(geometry)
             if parameter_dialog.exec():
                 self.parameters = parameter_dialog.get_parameters()
+                self.parameters["d"] = d
+                self.parameters["id"] = id_
                 self.data['geometry'] = geometry  # Definindo a geometria no self.data
+                self.data['id'] = id_
                 self.run_button.setEnabled(True)
 
     def saveFile(self):
@@ -119,7 +131,9 @@ class MainWindow(QMainWindow):
                 k1 = self.parameters["k1"]
                 g = self.parameters["g"]
                 l = self.parameters["l"]
-                self.results = self.thermal_model.run(self.data, geometry, T0, K1, k, K, k1, g, l)
+                d = self.parameters.get("d", None)
+                time = self.parameters["time"]
+                self.results = self.thermal_model.run(self.data, geometry, T0, K1, k, K, k1, g, l, d, time)
                 self.visualize_button.setEnabled(True)
                 QMessageBox.information(self, "Model Ready", "The thermal model is ready for visualization.")
             except Exception as e:
@@ -130,9 +144,17 @@ class MainWindow(QMainWindow):
     def visualizeResults(self):
         if self.results:
             self.visualization.set_data(self.results)
+            self.visualization.set_id(self.parameters.get("id", ""))
             self.visualization.show()
         else:
             QMessageBox.warning(self, "No Results", "Run the thermal model before visualizing results.")
+
+    def show_resume(self):
+        if not self.parameters:
+            QMessageBox.warning(self, "No Data", "No input data available.")
+        else:
+            resume_message = "\n".join([f"{key}: {value}" for key, value in self.parameters.items()])
+            QMessageBox.information(self, "Input Data Resume", resume_message)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

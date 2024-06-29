@@ -3,11 +3,11 @@ import matplotlib.pyplot as plt
 from math import erf, sqrt, pi, exp
 
 class ThermalModel:
-    def run(self, data, geometry, T0, K1, k, K, k1, g, l):
+    def run(self, data, geometry, T0, K1, k, K, k1, g, l, d=None, time=None):
         if geometry == "Tabular-like body":
             return self.run_tabular(data, T0, K1, k, K, k1, g, l)
         elif geometry == "Spheric-like body":
-            return self.run_spheric(data, T0, K1, k, K, k1, g, l)
+            return self.run_spheric(data, T0, K1, k, K, k1, g, l, d, time)
         elif geometry == "Plug-like body":
             return self.run_plug(data, T0, K1, k, K, k1, g, l)
 
@@ -15,16 +15,13 @@ class ThermalModel:
         # Implementação futura para corpos tabulares
         pass
 
-    def run_spheric(self, data, T0, K1, k, K, k1, g, l):
+    def run_spheric(self, data, T0, K1, k, K, k1, g, l, d, time):
         # Equation (27) of Jaeger (1964)
         alpha = ((2.2) * (0.43**0.5)) / ((2.59) * (0.34**0.5))
 
         # Equation (28) of Jaeger (1964)
         Tc = alpha * T0 / (1 + alpha) + g * l
 
-        # Parameters of intrusion
-        d = 100  # half diameter of sphere
-        time = [1, 100, 500, 2500, 5000, 10000, 25000, 50000]  # time after intrusion
         results = {}
 
         for t in time:
