@@ -1,47 +1,57 @@
 import numpy as np
+import matplotlib.pyplot as plt
+from math import erf, sqrt, pi, exp
 
 class ThermalModel:
-    def run(self, data):
-        geometry = data['geometry']
-        k = data['k']
-        L = data['L']
-        A = data['A']
-        T0 = data['T0']
-        T1 = data['T1']
-        
+    def run(self, data, geometry, T0, K1, k, K, k1, g, l):
         if geometry == "Tabular-like body":
-            return self.tabular_model(k, L, A, T0, T1)
-        elif geometry == "Plug-like body":
-            return self.plug_model(k, L, A, T0, T1)
+            return self.run_tabular(data, T0, K1, k, K, k1, g, l)
         elif geometry == "Spheric-like body":
-            return self.spheric_model(k, L, A, T0, T1)
-    
-    def tabular_model(self, k, L, A, T0, T1):
-        n = 10
-        dx = L / (n - 1)
-        x = np.linspace(0, L, n)
-        
-        A_matrix = np.zeros((n, n))
-        b = np.zeros(n)
-        
-        for i in range(1, n-1):
-            A_matrix[i, i-1] = k / dx**2
-            A_matrix[i, i] = -2 * k / dx**2
-            A_matrix[i, i+1] = k / dx**2
-        
-        A_matrix[0, 0] = 1
-        A_matrix[-1, -1] = 1
-        b[0] = T0
-        b[-1] = T1
-        
-        T = np.linalg.solve(A_matrix, b)
-        
-        return x, T
-    
-    def plug_model(self, k, L, A, T0, T1):
-        # Implementação do modelo plug
+            return self.run_spheric(data, T0, K1, k, K, k1, g, l)
+        elif geometry == "Plug-like body":
+            return self.run_plug(data, T0, K1, k, K, k1, g, l)
+
+    def run_tabular(self, data, T0, K1, k, K, k1, g, l):
+        # Implementação futura para corpos tabulares
         pass
-    
-    def spheric_model(self, k, L, A, T0, T1):
-        # Implementação do modelo esférico
+
+    def run_spheric(self, data, T0, K1, k, K, k1, g, l):
+        # Equation (27) of Jaeger (1964)
+        alpha = ((2.2) * (0.43**0.5)) / ((2.59) * (0.34**0.5))
+
+        # Equation (28) of Jaeger (1964)
+        Tc = alpha * T0 / (1 + alpha) + g * l
+
+        # Parameters of intrusion
+        d = 100  # half diameter of sphere
+        time = [1, 100, 500, 2500, 5000, 10000, 25000, 50000]  # time after intrusion
+        results = {}
+
+        for t in time:
+            x = [n for n in range(-199, 200, 1) if n != 0]
+            
+            # Dimensionless parameters
+            epsilon = [xi / d for xi in x]
+            tau = (k * t) / d**2  # dimensionless parameter tau
+
+            # Psi calculation
+            Psi = [
+                1/2 * (erf((epsilon_i + 1) / (2 * sqrt(tau))) -
+                       erf((epsilon_i - 1) / (2 * sqrt(tau))) -
+                       (2 * sqrt(tau) / (epsilon_i * sqrt(pi))) *
+                       (exp(-((epsilon_i - 1)**2) / (4 * tau)) -
+                        exp(-((epsilon_i + 1)**2) / (4 * tau))))
+                for epsilon_i in epsilon
+            ]
+
+            # Temperature calculation
+            T = [psi * T0 for psi in Psi]
+
+            # Store results
+            results[t] = (x, T)
+
+        return results
+
+    def run_plug(self, data, T0, K1, k, K, k1, g, l):
+        # Implementação futura para corpos cilíndricos
         pass

@@ -2,7 +2,7 @@ import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QAction, QFileDialog, QLabel, QMenuBar, QMessageBox
 from PyQt5.QtGui import QIcon, QPixmap
 from PyQt5.QtCore import Qt
-from gt_data.input_module import InputModule
+from gt_data.input_module import GeometrySelectionDialog, ParameterInputDialog
 from gt_data.thermal_model import ThermalModel
 from gt_data.visualization import Visualization
 
@@ -14,13 +14,14 @@ class MainWindow(QMainWindow):
         self.setGeometry(100, 100, 800, 600)
         self.setWindowIcon(QIcon("gt_data/images/icon.png"))
 
-        self.input_module = InputModule()
         self.thermal_model = ThermalModel()
         self.visualization = Visualization()
 
         self.initUI()
         self.createMenu()
-        self.data = None  # Inicializa os dados como None
+        self.data = {}  # Inicializa os dados como um dicionário
+        self.parameters = None
+        self.results = None  # Armazena os resultados da modelagem
 
     def initUI(self):
         layout = QVBoxLayout()
@@ -29,7 +30,7 @@ class MainWindow(QMainWindow):
 
         # Adicionar imagem central
         self.logo_label = QLabel(self)
-        pixmap = QPixmap("gt_data/images/logo.png")  # Substitua por sua nova imagem central
+        pixmap = QPixmap("gt_data/images/logo.png")
         self.logo_label.setPixmap(pixmap.scaled(300, 300, Qt.KeepAspectRatio))
         self.logo_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.logo_label)
@@ -48,13 +49,13 @@ class MainWindow(QMainWindow):
         self.run_button = QPushButton("Run Thermal Model")
         self.run_button.clicked.connect(self.run_model)
         self.run_button.setStyleSheet("font-size: 18px; padding: 10px;")
-        self.run_button.setEnabled(False)  # Desativa o botão inicialmente
+        self.run_button.setEnabled(False)
         layout.addWidget(self.run_button)
 
         self.visualize_button = QPushButton("Visualize Results")
         self.visualize_button.clicked.connect(self.visualizeResults)
         self.visualize_button.setStyleSheet("font-size: 18px; padding: 10px;")
-        self.visualize_button.setEnabled(False)  # Desativa o botão inicialmente
+        self.visualize_button.setEnabled(False)
         layout.addWidget(self.visualize_button)
 
         container = QWidget()
@@ -82,35 +83,44 @@ class MainWindow(QMainWindow):
         help_menu.addAction(help_action)
 
     def enterInputData(self):
-        self.input_module.exec()
-        self.data = self.input_module.get_data()
-        if self.data:
-            self.run_button.setEnabled(True)
+        geometry_dialog = GeometrySelectionDialog()
+        if geometry_dialog.exec():
+            geometry = geometry_dialog.get_geometry()
+            parameter_dialog = ParameterInputDialog(geometry)
+            if parameter_dialog.exec():
+                self.parameters = parameter_dialog.get_parameters()
+                self.data['geometry'] = geometry  # Definindo a geometria no self.data
+                self.run_button.setEnabled(True)
 
     def saveFile(self):
         options = QFileDialog.Options()
         fileName, _ = QFileDialog.getSaveFileName(self, "Save Model", "", "Model Files (*.mdl);;All Files (*)", options=options)
         if fileName:
-            # Implementar funcionalidade de salvar dados
             pass
 
     def openFile(self):
         options = QFileDialog.Options()
         fileName, _ = QFileDialog.getOpenFileName(self, "Open Model", "", "Model Files (*.mdl);;All Files (*)", options=options)
         if fileName:
-            # Implementar funcionalidade de abrir dados
             pass
 
     def viewReadme(self):
         import webbrowser
-        webbrowser.open("https://github.com/seu-usuario/seu-repositorio/blob/main/README.md")
+        webbrowser.open("https://github.com/valkgeo/GeoTherm/blob/main/README.md")
 
     def run_model(self):
-        if self.data:
+        if self.parameters:
             try:
-                results = self.thermal_model.run(self.data)
-                self.visualization.set_data(results)
-                self.visualize_button.setEnabled(True)  # Ativa o botão após o modelo ser executado
+                geometry = self.parameters["geometry"]
+                T0 = self.parameters["T0"]
+                K1 = self.parameters["K1"]
+                k = self.parameters["k"]
+                K = self.parameters["K"]
+                k1 = self.parameters["k1"]
+                g = self.parameters["g"]
+                l = self.parameters["l"]
+                self.results = self.thermal_model.run(self.data, geometry, T0, K1, k, K, k1, g, l)
+                self.visualize_button.setEnabled(True)
                 QMessageBox.information(self, "Model Ready", "The thermal model is ready for visualization.")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"An error occurred while running the model:\n{e}")
@@ -118,7 +128,8 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "No Data", "Please enter input data before running the model.")
 
     def visualizeResults(self):
-        if self.visualization.data:
+        if self.results:
+            self.visualization.set_data(self.results)
             self.visualization.show()
         else:
             QMessageBox.warning(self, "No Results", "Run the thermal model before visualizing results.")
