@@ -125,15 +125,20 @@ class MainWindow(QMainWindow):
         geometry_dialog = GeometrySelectionDialog()
         if geometry_dialog.exec():
             geometry, d, id_ = geometry_dialog.get_geometry_and_d()
+            print("Geometry selected:", geometry, "d:", d, "ID:", id_)  # Debug print
             parameter_dialog = ParameterInputDialog(geometry)
             if parameter_dialog.exec():
                 self.parameters = parameter_dialog.get_parameters()
+                # Add the 'd' value from the geometry dialog to the parameters and data dictionary
                 self.parameters["d"] = d
                 self.parameters["id"] = id_
                 self.data['geometry'] = geometry
                 self.data['id'] = id_
+                self.data['d'] = d    # Ensure that 'd' is included in data
+                self.data['time'] = self.parameters["time"]
                 self.run_button.setEnabled(True)
                 self.run_button.setStyleSheet("font-size: 18px; padding: 10px; color: black;")
+
 
     def viewReadme(self):
         import webbrowser
@@ -177,10 +182,13 @@ class MainWindow(QMainWindow):
 
     def visualizeResults(self):
         if self.results:
-            self.visualization.set_data(self.results)
+            # Pass the results, geometry type, and user ID to the visualization module.
+            self.visualization.set_data(self.results, self.data.get("geometry", "Unknown"))
+            self.visualization.set_id(self.data.get("id", "Unknown"))
             self.visualization.show()
         else:
             QMessageBox.warning(self, "No Results", "Run the thermal model before visualizing results.")
+
 
 
 if __name__ == "__main__":

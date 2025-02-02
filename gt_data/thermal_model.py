@@ -1,9 +1,27 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from math import erf, sqrt, pi, exp
+from math import sqrt, pi, exp
+from scipy.special import jn_zeros, j0, j1, erf  # Use vectorized erf from scipy.special
 
 class ThermalModel:
     def run(self, data, geometry, T0, K1, k, K, k1, g, l, d=None, time=None):
+        """
+        Main entry point for running the thermal model.
+        
+        Parameters:
+            data    : dictionary containing additional data (e.g., 'method', 'time', 'd')
+            geometry: string indicating the geometry ("Tabular-like body", 
+                      "Spheric-like body", "Plug-like body", or "Cylindrical-like body")
+            T0      : initial temperature of the intrusion
+            K1      : thermal conductivity of magma
+            k       : thermal diffusivity of country rock (κ)
+            K       : thermal conductivity of country rock
+            k1      : thermal diffusivity of magma
+            g       : geothermal gradient (if used)
+            l       : depth (or a parameter related to cover)
+            d       : characteristic dimension (e.g., half-thickness, radius)
+            time    : list or array of times at which to evaluate the solution
+        """
         method = data.get("method", "analytical")  # Default to analytical
         if method == "numerical":
             return self.run_numerical(data, T0, K1, k, K, k1, g, l)
@@ -11,56 +29,169 @@ class ThermalModel:
             return self.run_tabular(data, T0, K1, k, K, k1, g, l)
         elif geometry == "Spheric-like body":
             return self.run_spheric(data, T0, K1, k, K, k1, g, l, d, time)
-        elif geometry == "Plug-like body":
-            return self.run_plug(data, T0, K1, k, K, k1, g, l)
+        elif geometry == "Cylindrical-like body" or geometry == "Plug-like body":
+            # Here, 'Plug-like body' is interpreted as a cylindrical intrusion.
+            return self.run_plug(data, T0, K1, k, K, k1, g, l, d, time)
+        else:
+            raise ValueError("Unknown geometry specified.")
 
     # ========================
-    # SOLUÇÃO ANALÍTICA
+    # ANALYTICAL SOLUTION
     # ========================
     def run_tabular(self, data, T0, K1, k, K, k1, g, l):
-        # Implementação futura para corpos tabulares
-        pass
-
-    def run_spheric(self, data, T0, K1, k, K, k1, g, l, d, time):
-        # Equation (27) of Jaeger (1964)
-        alpha = ((2.2) * (0.43**0.5)) / ((2.59) * (0.34**0.5))
-
-        # Equation (28) of Jaeger (1964)
-        Tc = alpha * T0 / (1 + alpha) + g * l
-
+        """
+        Analytical solution for an infinite sheet (tabular body):
+        
+        T(x,t) = (T0/2) * { erf((x+d)/(2*sqrt(k*t))) - erf((x-d)/(2*sqrt(k*t))) }
+        
+        where:
+          - T0 is the initial temperature for -d < x < d,
+          - d is half the width of the initially heated sheet,
+          - k is the thermal diffusivity (κ),
+          - t is time, and
+          - x is the spatial coordinate.
+        """
+        # Retrieve 'd' and 'time' from the data dictionary
+        d_value = data.get("d", None)
+        if d_value is None:
+            raise ValueError("Parameter 'd' is required for Tabular-like body.")
+        time = data.get("time", None)
+        if time is None:
+            raise ValueError("Parameter 'time' (list of times) is required for Tabular-like body.")
+        
         results = {}
-
+        # Define a spatial grid for x, e.g., from -3*d to 3*d with 100 points.
+        x_values = np.linspace(-3 * d_value, 3 * d_value, 100)
+        
         for t in time:
-            x = [n for n in range(-2*int(d), 2*int(d), 1) if n != 0]
-            
-            # Dimensionless parameters
-            epsilon = [xi / d for xi in x]
-            tau = (k * t) / d**2  # dimensionless parameter tau
-
-            # Psi calculation
-            Psi = [
-                1/2 * (erf((epsilon_i + 1) / (2 * sqrt(tau))) -
-                       erf((epsilon_i - 1) / (2 * sqrt(tau))) -
-                       (2 * sqrt(tau) / (epsilon_i * sqrt(pi))) *
-                       (exp(-((epsilon_i - 1)**2) / (4 * tau)) -
-                        exp(-((epsilon_i + 1)**2) / (4 * tau))))
-                for epsilon_i in epsilon
-            ]
-
-            # Temperature calculation
-            T = [psi * T0 for psi in Psi]
-
-            # Store results
-            results[t] = (x, T)
-
+            # Calculate the temperature T(x,t) using the vectorized erf from scipy.special
+            factor = 2.0 * sqrt(k * t)
+            T_profile = (T0 / 2.0) * (
+                erf((x_values + d_value) / factor) - erf((x_values - d_value) / factor)
+            )
+            results[t] = (x_values, T_profile)
+        
         return results
 
-    def run_plug(self, data, T0, K1, k, K, k1, g, l):
-        # Implementação futura para corpos cilíndricos
-        pass
+    def run_spheric(self, data, T0, K1, k, K, k1, g, l, d, time):
+        """
+        Analytical solution for a spherical-like body, following Jaeger (1964).
+
+        Calculates the parameter sigma from the thermal conductivities and diffusivities:
+            sigma = (K1 * sqrt(k)) / (K * sqrt(k1))    # Equation (27) of Jaeger (1964)
+            
+        And the initial contact temperature:
+            Tc = sigma * T0 / (1 + sigma) + g * l      # Equation (28) of Jaeger (1964)
+            
+        For each time instant t, calculates the dimensionless solution ψ(ξ,τ) and
+        the temperature T = ψ * T0.
+        
+        Parameters:
+            - d: characteristic dimension (e.g., radius or diameter)
+            - time: list of times at which the solution is computed
+        """
+        # Calculate the parameter sigma as per Equation (27) of Jaeger (1964)
+        sigma = (K1 * sqrt(k)) / (K * sqrt(k1))
+        # Calculate the initial contact temperature (including a geothermal term)
+        Tc = sigma * T0 / (1 + sigma) + g * l
+
+        results = {}
+        for t in time:
+            # Create a spatial grid for x; using integer steps (you might use np.linspace for higher resolution)
+            x = [n for n in range(-2 * int(d), 2 * int(d), 1) if n != 0]
+            
+            # Compute dimensionless spatial coordinate ε = x/d
+            epsilon = [xi / d for xi in x]
+            # Compute dimensionless time τ = (κ * t) / d²
+            tau = (k * t) / (d ** 2)
+            
+            # Calculate ψ(ξ,τ) using the expression from Jaeger (1964)
+            # (See Equation (16) of Jaeger (1964), using standard error functions and exponentials)
+            Psi = [
+                0.5 * (
+                    erf((epsilon_i + 1) / (2 * sqrt(tau))) -
+                    erf((epsilon_i - 1) / (2 * sqrt(tau))) -
+                    (2 * sqrt(tau) / (epsilon_i * sqrt(pi))) *
+                    (
+                        exp(-((epsilon_i - 1) ** 2) / (4 * tau)) -
+                        exp(-((epsilon_i + 1) ** 2) / (4 * tau))
+                    )
+                )
+                for epsilon_i in epsilon
+            ]
+            
+            # Compute the temperature profile T(x,t)
+            T_profile = [psi * T0 for psi in Psi]
+            
+            results[t] = (x, T_profile)
+        
+        return results
+
+    def run_plug(self, data, T0, K1, k, K, k1, g, l, d, time):
+        """
+        Analytical solution for a plug-like (cylindrical) body.
+        
+        This solution is for an infinite circular cylinder of radius d that has an
+        initial uniform temperature T0 (for r < d) and zero temperature outside.
+        
+        The temperature at a radial distance r and time t is given by:
+        
+            T(r,t) = T0 * [ 1 - 2 * Σ_{m=1}^∞ { J0(λ_m * r/d) / (λ_m * J1(λ_m)) * exp(-λ_m² * κ t/d²) } ]
+        
+        This formulation is based on Equation (14) of Jaeger (1964) (as given by Carslaw and Jaeger, §10.3 (12)).
+        It is derived by representing the solution in a series expansion in Bessel functions:
+        
+            - J0 and J1 are the Bessel functions of the first kind of order 0 and 1, respectively.
+            - λ_m are the positive zeros of J0.
+            - κ (here given by k) is the thermal diffusivity.
+        
+        Parameters:
+            - d: radius of the cylinder.
+            - time: list or array of times at which the solution is computed.
+            - r: radial coordinate (evaluated on a radial grid).
+        """
+        # Check for 'time' in data
+        if time is None:
+            time = data.get("time", None)
+            if time is None:
+                raise ValueError("Parameter 'time' (list of times) is required for Plug-like body.")
+        # Check for 'd' in data
+        if d is None:
+            d = data.get("d", None)
+            if d is None:
+                raise ValueError("Parameter 'd' (cylinder radius) is required for Plug-like body.")
+        
+        results = {}
+        # Define a radial grid from 0 to 3*d with 100 points.
+        r_values = np.linspace(0, 3 * d, 100)
+        
+        # Number of terms in the series expansion (adjust M for accuracy)
+        M = 20
+        # Compute the first M positive zeros of the Bessel function J0.
+        lambda_zeros = jn_zeros(0, M)
+        
+        for t in time:
+            # Precompute the exponential factors for each term in the series
+            exp_factors = np.exp(- (lambda_zeros**2) * k * t / (d**2))
+            
+            # Initialize the temperature profile as an array of ones
+            T_profile = np.ones_like(r_values)
+            
+            # Sum over the series terms (subtracting from 1)
+            for m in range(M):
+                lambda_m = lambda_zeros[m]
+                term = (j0(lambda_m * r_values / d) / (lambda_m * j1(lambda_m))) * exp_factors[m]
+                T_profile -= 2 * term
+            
+            # Multiply by T0 to obtain the final temperature profile
+            T_profile *= T0
+            
+            results[t] = (r_values, T_profile)
+        
+        return results
 
     # ========================
-    # SOLUÇÃO NUMÉRICA (FEM)
+    # NUMERICAL SOLUTION (FEM)
     # ========================
     def run_numerical(self, data, T0, K1, k, K, k1, g, l):
         grid = data.get("grid", None)
@@ -74,27 +205,28 @@ class ThermalModel:
         return solution
 
     def generate_default_grid(self, nx=50, ny=50):
-        """Gera um grid padrão 2D para modelagem numérica."""
+        """Generates a default 2D grid for numerical modeling."""
         x = np.linspace(0, 1, nx)
         y = np.linspace(0, 1, ny)
         xv, yv = np.meshgrid(x, y)
         return {"x": xv, "y": yv}
 
     def assemble_fem_system(self, grid, parameters, T0, K1, k, K, k1, g, l):
-        """Monta a matriz de rigidez e o vetor de carga para o FEM."""
+        """Assembles the stiffness matrix and load vector for the FEM."""
         nx, ny = grid["x"].shape
-        matrix = np.zeros((nx * ny, nx * ny))  # Matriz de rigidez
-        rhs = np.zeros(nx * ny)  # Vetor de carga
+        matrix = np.zeros((nx * ny, nx * ny))  # Stiffness matrix
+        rhs = np.zeros(nx * ny)  # Load vector
 
-        # Exemplo simples de preenchimento (implementação real seria mais complexa)
+        # Simple example: fill the diagonal and set a constant heat source T0
         for i in range(nx * ny):
-            matrix[i, i] = 1  # Elemento diagonal
-            rhs[i] = T0  # Fonte de calor
+            matrix[i, i] = 1
+            rhs[i] = T0
 
         return matrix, rhs
 
     def solve_system(self, matrix, rhs):
-        """Resolve o sistema linear Ax = b."""
+        """Solves the linear system Ax = b."""
         from scipy.sparse.linalg import spsolve
-        solution = np.linalg.solve(matrix, rhs)  # Use solução densa para simplificar
-        return solution.reshape((int(sqrt(len(rhs))), int(sqrt(len(rhs)))))
+        solution = np.linalg.solve(matrix, rhs)  # Using dense solver for simplicity
+        size = int(sqrt(len(rhs)))
+        return solution.reshape((size, size))
