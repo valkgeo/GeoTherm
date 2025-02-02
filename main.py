@@ -118,7 +118,7 @@ class MainWindow(QMainWindow):
             if selected_method == "analytical":
                 self.configure_analytical_input()
             elif selected_method == "numerical":
-                QMessageBox.information(self, "Numerical Modeling", "Proceeding to numerical modeling module.")
+                QMessageBox.information(self, "Numerical Modeling", "The method using numerical modeling is still in development. Please wait. For questions, contact samir.valcacio@ufrr.br.")
                 # Here you can call another file/module for numerical modeling
 
     def configure_analytical_input(self):
