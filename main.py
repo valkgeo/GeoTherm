@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (
     QMessageBox, QDialog, QLineEdit, QRadioButton, QButtonGroup
 )
 from PyQt5.QtGui import QIcon, QPixmap
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 from gt_data.input_module import GeometrySelectionDialog, ParameterInputDialog
 from gt_data.thermal_model import ThermalModel
 from gt_data.visualization import Visualization
@@ -51,6 +51,8 @@ class MainWindow(QMainWindow):
 
         self.thermal_model = ThermalModel()
         self.visualization = Visualization()
+        # Connect the next input signal (if the visualization window is used for that purpose)
+        self.visualization.next_input_signal.connect(self.clear_inputs)
 
         self.initUI()
         self.createMenu()
@@ -94,8 +96,13 @@ class MainWindow(QMainWindow):
         self.clear_button = QPushButton("Clear Inputs")
         self.clear_button.clicked.connect(self.clear_inputs)
         self.clear_button.setStyleSheet("font-size: 18px; padding: 10px;")
-        self.clear_button.setVisible(False)  # Initially hidden
+        self.clear_button.setVisible(False)
         layout.addWidget(self.clear_button)
+
+        # NEW: Status label at the bottom for progress messages.
+        self.status_label = QLabel("")
+        self.status_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.status_label)
 
         container = QWidget()
         container.setLayout(layout)
@@ -118,8 +125,9 @@ class MainWindow(QMainWindow):
             if selected_method == "analytical":
                 self.configure_analytical_input()
             elif selected_method == "numerical":
-                QMessageBox.information(self, "Numerical Modeling", "The method using numerical modeling is still in development. Please wait. For questions, contact samir.valcacio@ufrr.br.")
-                # Here you can call another file/module for numerical modeling
+                QMessageBox.information(self, "Numerical Modeling",
+                    "The method using numerical modeling is still in development.")
+                # Additional handling for numerical modeling
 
     def configure_analytical_input(self):
         geometry_dialog = GeometrySelectionDialog()
@@ -129,16 +137,14 @@ class MainWindow(QMainWindow):
             parameter_dialog = ParameterInputDialog(geometry)
             if parameter_dialog.exec():
                 self.parameters = parameter_dialog.get_parameters()
-                # Add the 'd' value from the geometry dialog to the parameters and data dictionary
                 self.parameters["d"] = d
                 self.parameters["id"] = id_
                 self.data['geometry'] = geometry
                 self.data['id'] = id_
-                self.data['d'] = d    # Ensure that 'd' is included in data
+                self.data['d'] = d
                 self.data['time'] = self.parameters["time"]
                 self.run_button.setEnabled(True)
                 self.run_button.setStyleSheet("font-size: 18px; padding: 10px; color: black;")
-
 
     def viewReadme(self):
         import webbrowser
@@ -162,7 +168,7 @@ class MainWindow(QMainWindow):
                     self.results = self.thermal_model.run(self.data, geometry, T0, K1, k, K, k1, g, l, d, time)
                     self.visualize_button.setEnabled(True)
                     self.visualize_button.setStyleSheet("font-size: 18px; padding: 10px; color: red;")
-                    self.clear_button.setVisible(True)  # Show clear button
+                    self.clear_button.setVisible(True)
                     QMessageBox.information(self, "Model Ready", "Analytical model ready for visualization.")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"An error occurred while running the model:\n{e}")
@@ -170,6 +176,10 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "No Data", "Please enter input data before running the model.")
 
     def clear_inputs(self):
+        """
+        Clears all input data and displays a progress message in the status label.
+        Shows "Clearing data input..." and then after 1 second "Data input cleared" for 1 second.
+        """
         self.parameters = None
         self.data = {}
         self.results = None
@@ -178,17 +188,23 @@ class MainWindow(QMainWindow):
         self.visualize_button.setEnabled(False)
         self.visualize_button.setStyleSheet("font-size: 18px; padding: 10px; color: gray;")
         self.clear_button.setVisible(False)
-        QMessageBox.information(self, "Inputs Cleared", "All inputs have been cleared.")
+
+        self.status_label.setText("Clearing data input...")
+        QApplication.processEvents()  # Ensure the label updates immediately
+
+        QTimer.singleShot(1000, self._clear_inputs_done)
+
+    def _clear_inputs_done(self):
+        self.status_label.setText("Data input cleared")
+        QTimer.singleShot(1000, lambda: self.status_label.setText(""))
 
     def visualizeResults(self):
         if self.results:
-            # Pass the results, geometry type, and user ID to the visualization module.
             self.visualization.set_data(self.results, self.data.get("geometry", "Unknown"))
             self.visualization.set_id(self.data.get("id", "Unknown"))
             self.visualization.show()
         else:
             QMessageBox.warning(self, "No Results", "Run the thermal model before visualizing results.")
-
 
 
 if __name__ == "__main__":

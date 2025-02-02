@@ -54,6 +54,8 @@ def figure_to_pixmap(fig, width=200, height=200):
 
 
 class Visualization(QDialog):
+    next_input_signal = pyqtSignal()
+    
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Thermal Model Results")
@@ -95,6 +97,11 @@ class Visualization(QDialog):
         self.save_grid_button = QPushButton("Save Grid as PDF")
         self.save_grid_button.clicked.connect(self.save_grid_as_pdf)
         layout.addWidget(self.save_grid_button)
+
+        self.next_input_button = QPushButton("Next Input")
+        self.next_input_button.clicked.connect(self.next_input)
+        self.next_input_button.setVisible(False)
+        layout.addWidget(self.next_input_button)
 
         self.setLayout(layout)
         self.update_preview()
@@ -258,6 +265,21 @@ class Visualization(QDialog):
         real_count = len([fig for fig in self.stored_plots if not self.is_placeholder(fig)])
         max_slots = self.grid_rows * self.grid_cols
         self.store_button.setText(f"Store Plot - {real_count}/{max_slots} slots used")
+
+        # Show Next Input button only if at least one real plot is stored
+        if real_count >= 1:
+            self.next_input_button.setVisible(True)
+        else:
+            self.next_input_button.setVisible(False)
+            
+    def next_input(self):
+        """
+        Called when the 'Next Input' button is clicked.
+        Emits a signal to indicate that main inputs should be cleared, then closes this window.
+        """
+        # Emit the signal so that the main module can clear its inputs.
+        self.next_input_signal.emit()
+        self.close()
 
     def update_preview(self):
         """
