@@ -8,6 +8,7 @@ from PyQt5.QtCore import Qt, QTimer
 from gt_data.input_module import GeometrySelectionDialog, ParameterInputDialog
 from gt_data.thermal_model import ThermalModel
 from gt_data.visualization import Visualization
+from gt_data.data_manager import data_manager  # Import global DataManager instance
 
 
 class MethodSelectionDialog(QDialog):
@@ -51,7 +52,7 @@ class MainWindow(QMainWindow):
 
         self.thermal_model = ThermalModel()
         self.visualization = Visualization()
-        # Connect the next input signal from visualization (if used)
+        # Conecta o sinal next_input_signal para limpar inputs, se necessário.
         self.visualization.next_input_signal.connect(self.clear_inputs)
 
         self.initUI()
@@ -76,7 +77,7 @@ class MainWindow(QMainWindow):
         title_label.setStyleSheet("font-size: 24px; font-weight: bold; color: orange;")
         layout.addWidget(title_label)
 
-        # Store the "Enter Input Data" button as an instance variable.
+        # Botão "Enter Input Data"
         self.input_button = QPushButton("Enter Input Data")
         self.input_button.clicked.connect(self.enterInputData)
         self.input_button.setStyleSheet("font-size: 18px; padding: 10px;")
@@ -100,7 +101,7 @@ class MainWindow(QMainWindow):
         self.clear_button.setVisible(False)
         layout.addWidget(self.clear_button)
 
-        # NEW: Status label for progress messages at the bottom.
+        # Status label para mensagens de progresso
         self.status_label = QLabel("")
         self.status_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.status_label)
@@ -134,8 +135,15 @@ class MainWindow(QMainWindow):
         geometry_dialog = GeometrySelectionDialog()
         if geometry_dialog.exec():
             geometry, d, id_ = geometry_dialog.get_geometry_and_d()
+            if geometry is None:
+                return  # Se o usuário não fornecer um ID válido, encerra o diálogo
             print("Geometry selected:", geometry, "d:", d, "ID:", id_)  # Debug print
+
             parameter_dialog = ParameterInputDialog(geometry)
+            # Se o ID já existir no DataManager, pré-preenche o diálogo com os parâmetros armazenados.
+            stored = data_manager.get_data(id_)
+            if stored:
+                parameter_dialog.set_parameters(stored)
             if parameter_dialog.exec():
                 self.parameters = parameter_dialog.get_parameters()
                 self.parameters["d"] = d
@@ -171,6 +179,11 @@ class MainWindow(QMainWindow):
                     self.visualize_button.setStyleSheet("font-size: 18px; padding: 10px; color: red;")
                     self.clear_button.setVisible(True)
                     QMessageBox.information(self, "Model Ready", "Analytical model ready for visualization.")
+
+                    # Armazena ou atualiza os dados usando o DataManager
+                    data_manager.add_or_update_data(self.parameters["id"], self.parameters)
+                    print(f"Model with ID '{self.parameters['id']}' stored successfully.")
+                # Outros métodos, se houver...
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"An error occurred while running the model:\n{e}")
         else:
@@ -189,16 +202,15 @@ class MainWindow(QMainWindow):
         self.visualize_button.setEnabled(False)
         self.visualize_button.setStyleSheet("font-size: 18px; padding: 10px; color: gray;")
         self.clear_button.setVisible(False)
-        self.input_button.setEnabled(False)  # Disable "Enter Input Data" button
+        self.input_button.setEnabled(False)
 
         self.status_label.setText("Clearing data input...")
-        QApplication.processEvents()  # Force immediate update
-
+        QApplication.processEvents()
         QTimer.singleShot(1000, self._clear_inputs_done)
 
     def _clear_inputs_done(self):
         self.status_label.setText("Data input cleared")
-        self.input_button.setEnabled(True)  # Re-enable "Enter Input Data" button
+        self.input_button.setEnabled(True)
         QTimer.singleShot(1000, lambda: self.status_label.setText(""))
 
     def visualizeResults(self):
