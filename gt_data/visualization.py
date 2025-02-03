@@ -146,7 +146,7 @@ class Visualization(QDialog):
                 ax.plot(x, T, label=f"Time = {t} years")
             ax.set_xlabel("Distance from center (m)")
             ax.set_ylabel("Temperature (°C)")
-            ax.set_title(f"Thermal modeling for {self.id} {self.geom_type} body")
+            ax.set_title(f"Thermal modeling for {self.id} {self.geom_type}")
             ax.legend()
             plt.tight_layout()
             plt.show(block=False)
@@ -167,7 +167,7 @@ class Visualization(QDialog):
             # Turn off extra subplots if necessary
             for j in range(i+1, len(axes)):
                 axes[j].axis('off')
-            fig.suptitle(f"Thermal modeling for {self.id} {self.geom_type} body", fontsize=16)
+            fig.suptitle(f"Thermal modeling for {self.id} {self.geom_type}", fontsize=16)
             plt.tight_layout(rect=[0, 0.03, 1, 0.95])
             plt.show(block=False)
         else:
@@ -201,7 +201,7 @@ class Visualization(QDialog):
                 ax.plot(x, T, label=f"Time = {t} years")
             ax.set_xlabel("Distance from center (m)")
             ax.set_ylabel("Temperature (°C)")
-            ax.set_title(f"Thermal modeling for {self.id} {self.geom_type} body")
+            ax.set_title(f"Thermal modeling for {self.id} {self.geom_type}")
             ax.legend()
         else:
             ax.text(0.5, 0.5, "2D plot - use Save Grid as PDF", ha="center", va="center")

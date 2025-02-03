@@ -94,6 +94,8 @@ class ThermalModel:
         sigma = (K1 * sqrt(k)) / (K * sqrt(k1))
         # Calculate the initial contact temperature (including a geothermal term)
         Tc = sigma * T0 / (1 + sigma) + g * l
+        # Calculate the horst rock temperature
+        Tecx = g * l
 
         results = {}
         for t in time:
@@ -121,7 +123,7 @@ class ThermalModel:
             ]
             
             # Compute the temperature profile T(x,t)
-            T_profile = [psi * T0 for psi in Psi]
+            T_profile = [(T0 - Tecx) * psi + Tecx  for psi in Psi]
             
             results[t] = (x, T_profile)
         
