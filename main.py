@@ -51,7 +51,7 @@ class MainWindow(QMainWindow):
 
         self.thermal_model = ThermalModel()
         self.visualization = Visualization()
-        # Connect the next input signal (if the visualization window is used for that purpose)
+        # Connect the next input signal from visualization (if used)
         self.visualization.next_input_signal.connect(self.clear_inputs)
 
         self.initUI()
@@ -76,10 +76,11 @@ class MainWindow(QMainWindow):
         title_label.setStyleSheet("font-size: 24px; font-weight: bold; color: orange;")
         layout.addWidget(title_label)
 
-        input_button = QPushButton("Enter Input Data")
-        input_button.clicked.connect(self.enterInputData)
-        input_button.setStyleSheet("font-size: 18px; padding: 10px;")
-        layout.addWidget(input_button)
+        # Store the "Enter Input Data" button as an instance variable.
+        self.input_button = QPushButton("Enter Input Data")
+        self.input_button.clicked.connect(self.enterInputData)
+        self.input_button.setStyleSheet("font-size: 18px; padding: 10px;")
+        layout.addWidget(self.input_button)
 
         self.run_button = QPushButton("Run Thermal Model")
         self.run_button.clicked.connect(self.run_model)
@@ -99,7 +100,7 @@ class MainWindow(QMainWindow):
         self.clear_button.setVisible(False)
         layout.addWidget(self.clear_button)
 
-        # NEW: Status label at the bottom for progress messages.
+        # NEW: Status label for progress messages at the bottom.
         self.status_label = QLabel("")
         self.status_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.status_label)
@@ -178,7 +179,7 @@ class MainWindow(QMainWindow):
     def clear_inputs(self):
         """
         Clears all input data and displays a progress message in the status label.
-        Shows "Clearing data input..." and then after 1 second "Data input cleared" for 1 second.
+        Disables the "Enter Input Data" button while clearing.
         """
         self.parameters = None
         self.data = {}
@@ -188,14 +189,16 @@ class MainWindow(QMainWindow):
         self.visualize_button.setEnabled(False)
         self.visualize_button.setStyleSheet("font-size: 18px; padding: 10px; color: gray;")
         self.clear_button.setVisible(False)
+        self.input_button.setEnabled(False)  # Disable "Enter Input Data" button
 
         self.status_label.setText("Clearing data input...")
-        QApplication.processEvents()  # Ensure the label updates immediately
+        QApplication.processEvents()  # Force immediate update
 
         QTimer.singleShot(1000, self._clear_inputs_done)
 
     def _clear_inputs_done(self):
         self.status_label.setText("Data input cleared")
+        self.input_button.setEnabled(True)  # Re-enable "Enter Input Data" button
         QTimer.singleShot(1000, lambda: self.status_label.setText(""))
 
     def visualizeResults(self):

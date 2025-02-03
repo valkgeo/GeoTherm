@@ -137,7 +137,7 @@ class Visualization(QDialog):
                 ax.plot(x, T, label=f"Time = {time} years")
             ax.set_xlabel("Distance from center (m)")
             ax.set_ylabel("Temperature (°C)")
-            ax.set_title(f"Thermal modeling for {self.geom_type} {self.id} body")
+            ax.set_title(f"Thermal modeling for {self.id} {self.geom_type} ")
             ax.legend()
             plt.tight_layout()
             plt.show(block=False)
@@ -168,7 +168,7 @@ class Visualization(QDialog):
             ax.plot(x, T, label=f"Time = {time} years")
         ax.set_xlabel("Distance from center (m)")
         ax.set_ylabel("Temperature (°C)")
-        ax.set_title(f"Thermal modeling for {self.geom_type} {self.id} body")
+        ax.set_title(f"Thermal modeling for {self.id}  {self.geom_type}")
         ax.legend()
         plt.tight_layout()
         fig.savefig(pdf_filename, format="pdf")
@@ -247,7 +247,7 @@ class Visualization(QDialog):
             ax.plot(x, T, label=f"Time = {time} years")
         ax.set_xlabel("Distance from center (m)")
         ax.set_ylabel("Temperature (°C)")
-        ax.set_title(f"Thermal modeling for {self.geom_type} {self.id} body")
+        ax.set_title(f"{self.id}")
         ax.legend()
         plt.tight_layout()
 
@@ -379,7 +379,7 @@ class Visualization(QDialog):
             else:
                 ax.axis('off')
 
-        fig.suptitle(f"Thermal modeling for {self.geom_type} {self.id} body", fontsize=16)
+        fig.suptitle(f"Thermal Model Results Grid ", fontsize=16)
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         fig.savefig(pdf_filename, format="pdf")
         plt.close(fig)
