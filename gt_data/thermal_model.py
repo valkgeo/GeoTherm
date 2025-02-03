@@ -59,6 +59,9 @@ class ThermalModel:
         if time is None:
             raise ValueError("Parameter 'time' (list of times) is required for Tabular-like body.")
         
+        # Calculate the horst rock temperature
+        Tecx = g * l
+
         results = {}
         # Define a spatial grid for x, e.g., from -3*d to 3*d with 100 points.
         x_values = np.linspace(-3 * d_value, 3 * d_value, 100)
@@ -66,9 +69,9 @@ class ThermalModel:
         for t in time:
             # Calculate the temperature T(x,t) using the vectorized erf from scipy.special
             factor = 2.0 * sqrt(k * t)
-            T_profile = (T0 / 2.0) * (
+            T_profile = ((T0 - Tecx) / 2.0) * (
                 erf((x_values + d_value) / factor) - erf((x_values - d_value) / factor)
-            )
+            ) + Tecx
             results[t] = (x_values, T_profile)
         
         return results
@@ -168,6 +171,9 @@ class ThermalModel:
             d1, d2 = d[0], d[1]
         else:
             d1 = d2 = d
+        
+        # Calculate the horst rock temperature
+        Tecx = g * l
 
         results = {}
         # Define a spatial grid for x and y: for example, from -3*d1 to 3*d1 for x and -3*d2 to 3*d2 for y.
@@ -188,7 +194,7 @@ class ThermalModel:
             phi2 = 0.5 * (erf((xi2 + 1) / (2 * np.sqrt(tau2))) - erf((xi2 - 1) / (2 * np.sqrt(tau2))))
             
             # The temperature distribution is the product multiplied by T0
-            T_profile = T0 * phi1 * phi2
+            T_profile = (T0 - Tecx) * phi1 * phi2 + Tecx
             
             results[t] = (X, Y, T_profile)
         
