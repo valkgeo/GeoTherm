@@ -1,14 +1,15 @@
 import sys
+import json
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QAction, QLabel,
-    QMessageBox, QDialog, QLineEdit, QRadioButton, QButtonGroup
+    QMessageBox, QDialog, QLineEdit, QRadioButton, QButtonGroup, QFileDialog
 )
 from PyQt5.QtGui import QIcon, QPixmap
 from PyQt5.QtCore import Qt, QTimer
 from gt_data.input_module import GeometrySelectionDialog, ParameterInputDialog
 from gt_data.thermal_model import ThermalModel
 from gt_data.visualization import Visualization
-from gt_data.data_manager import data_manager  # Import global DataManager instance
+from gt_data.data_manager import data_manager   # Import the global DataManager instance
 
 
 class MethodSelectionDialog(QDialog):
@@ -52,7 +53,7 @@ class MainWindow(QMainWindow):
 
         self.thermal_model = ThermalModel()
         self.visualization = Visualization()
-        # Conecta o sinal next_input_signal para limpar inputs, se necessário.
+        # Connect the next input signal from visualization to clear_inputs.
         self.visualization.next_input_signal.connect(self.clear_inputs)
 
         self.initUI()
@@ -77,7 +78,7 @@ class MainWindow(QMainWindow):
         title_label.setStyleSheet("font-size: 24px; font-weight: bold; color: orange;")
         layout.addWidget(title_label)
 
-        # Botão "Enter Input Data"
+        # "Enter Input Data" button
         self.input_button = QPushButton("Enter Input Data")
         self.input_button.clicked.connect(self.enterInputData)
         self.input_button.setStyleSheet("font-size: 18px; padding: 10px;")
@@ -101,7 +102,7 @@ class MainWindow(QMainWindow):
         self.clear_button.setVisible(False)
         layout.addWidget(self.clear_button)
 
-        # Status label para mensagens de progresso
+        # Status label for progress messages
         self.status_label = QLabel("")
         self.status_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.status_label)
@@ -112,11 +113,62 @@ class MainWindow(QMainWindow):
 
     def createMenu(self):
         menubar = self.menuBar()
-        help_menu = menubar.addMenu("Help")
 
+        # File menu with Open, Save, and Exit actions.
+        file_menu = menubar.addMenu("File")
+
+        open_action = QAction("Open", self)
+        open_action.triggered.connect(self.load_data)
+        file_menu.addAction(open_action)
+
+        self.save_action = QAction("Save", self)
+        # Enable Save only if there is at least one stored input
+        self.save_action.setEnabled(bool(data_manager.get_ids()))
+        self.save_action.triggered.connect(self.save_data)
+        file_menu.addAction(self.save_action)
+
+        exit_action = QAction("Exit", self)
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(exit_action)
+
+        # Help menu
+        help_menu = menubar.addMenu("Help")
         help_action = QAction("View README on GitHub", self)
         help_action.triggered.connect(self.viewReadme)
         help_menu.addAction(help_action)
+
+    def save_data(self):
+        """
+        Saves the stored input data (data_manager.data_store) to a text file in JSON format.
+        """
+        filename, _ = QFileDialog.getSaveFileName(self, "Save Input Data", "", "Text Files (*.txt)")
+        if not filename:
+            return
+        if not filename.lower().endswith(".txt"):
+            filename += ".txt"
+        try:
+            with open(filename, "w", encoding="utf-8") as f:
+                json.dump(data_manager.data_store, f, indent=4)
+            QMessageBox.information(self, "Save Successful", f"Input data saved to {filename}")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to save data:\n{e}")
+
+    def load_data(self):
+        """
+        Loads stored input data from a JSON text file and updates the DataManager.
+        """
+        filename, _ = QFileDialog.getOpenFileName(self, "Open Input Data", "", "Text Files (*.txt)")
+        if not filename:
+            return
+        try:
+            with open(filename, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            data_manager.data_store = data
+            QMessageBox.information(self, "Load Successful", f"Input data loaded from {filename}")
+            # Update Save action
+            self.save_action.setEnabled(bool(data_manager.get_ids()))
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to load data:\n{e}")
 
     def enterInputData(self):
         method_dialog = MethodSelectionDialog()
@@ -129,21 +181,25 @@ class MainWindow(QMainWindow):
             elif selected_method == "numerical":
                 QMessageBox.information(self, "Numerical Modeling",
                     "The method using numerical modeling is still in development.")
-                # Additional handling for numerical modeling
 
     def configure_analytical_input(self):
         geometry_dialog = GeometrySelectionDialog()
         if geometry_dialog.exec():
             geometry, d, id_ = geometry_dialog.get_geometry_and_d()
             if geometry is None:
-                return  # Se o usuário não fornecer um ID válido, encerra o diálogo
+                return
             print("Geometry selected:", geometry, "d:", d, "ID:", id_)  # Debug print
 
             parameter_dialog = ParameterInputDialog(geometry)
-            # Se o ID já existir no DataManager, pré-preenche o diálogo com os parâmetros armazenados.
+            # Se o ID já existir, pré-preenche os parâmetros.
             stored = data_manager.get_data(id_)
             if stored:
-                parameter_dialog.set_parameters(stored)
+                # Se o dicionário armazenado possui a chave "parameters", usamos-a;
+                # caso contrário, usamos o próprio dicionário armazenado.
+                if "parameters" in stored:
+                    parameter_dialog.set_parameters(stored["parameters"])
+                else:
+                    parameter_dialog.set_parameters(stored)
             if parameter_dialog.exec():
                 self.parameters = parameter_dialog.get_parameters()
                 self.parameters["d"] = d
@@ -180,9 +236,10 @@ class MainWindow(QMainWindow):
                     self.clear_button.setVisible(True)
                     QMessageBox.information(self, "Model Ready", "Analytical model ready for visualization.")
 
-                    # Armazena ou atualiza os dados usando o DataManager
-                    data_manager.add_or_update_data(self.parameters["id"], self.parameters)
+                    # Armazena ou atualiza os dados usando o DataManager, armazenando o dicionário completo.
+                    data_manager.add_or_update_data(self.parameters["id"], self.data['geometry'], self.data['d'], self.parameters)
                     print(f"Model with ID '{self.parameters['id']}' stored successfully.")
+                    self.save_action.setEnabled(True)
                 # Outros métodos, se houver...
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"An error occurred while running the model:\n{e}")
@@ -190,10 +247,6 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "No Data", "Please enter input data before running the model.")
 
     def clear_inputs(self):
-        """
-        Clears all input data and displays a progress message in the status label.
-        Disables the "Enter Input Data" button while clearing.
-        """
         self.parameters = None
         self.data = {}
         self.results = None
