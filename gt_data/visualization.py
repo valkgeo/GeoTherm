@@ -1,5 +1,6 @@
 import os
 import time
+import numpy as np
 import matplotlib.pyplot as plt
 from io import BytesIO
 
@@ -10,7 +11,6 @@ from PyQt5.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QLabel, QPushButton, QFileDialog,
     QGridLayout, QMessageBox, QInputDialog
 )
-
 
 class ClickableLabel(QLabel):
     """
@@ -24,7 +24,6 @@ class ClickableLabel(QLabel):
 
     def mousePressEvent(self, event):
         self.clicked.emit(self.index)
-
 
 def figure_to_pixmap(fig, width=200, height=200):
     """
@@ -51,7 +50,6 @@ def figure_to_pixmap(fig, width=200, height=200):
     pixmap = pixmap.scaled(width, height, Qt.KeepAspectRatio, Qt.SmoothTransformation)
     buffer.close()
     return pixmap
-
 
 class Visualization(QDialog):
     next_input_signal = pyqtSignal()
@@ -112,7 +110,9 @@ class Visualization(QDialog):
         Sets the model results and the geometry type.
 
         Parameters:
-            results (dict): Dictionary containing the model results (e.g., {time: (x, T)}).
+            results (dict): Dictionary containing the model results.
+                For 1D data: {time: (x, T)}
+                For 2D data: {time: (X, Y, T)}
             geom_type (str): The type of geometry chosen (e.g., "Spheric-like body", "Tabular-like body", "Plug-like body").
         """
         self.results = results
@@ -129,18 +129,49 @@ class Visualization(QDialog):
 
     def plot_results(self):
         """
-        Displays the thermal model results in a matplotlib plot.
+        Displays the thermal model results using matplotlib.
+        
+        If each result tuple has 2 elements, a 1D line plot is produced.
+        If it has 3 elements (X, Y, T), a contour plot is produced for each time.
         """
-        if self.results is not None:
+        if self.results is None:
+            return
+
+        sample = next(iter(self.results.values()))
+        # Check if results are 1D (tuple with 2 elements) or 2D (tuple with 3 elements)
+        if len(sample) == 2:
+            # 1D case
             fig, ax = plt.subplots()
-            for time, (x, T) in self.results.items():
-                ax.plot(x, T, label=f"Time = {time} years")
+            for t, (x, T) in self.results.items():
+                ax.plot(x, T, label=f"Time = {t} years")
             ax.set_xlabel("Distance from center (m)")
             ax.set_ylabel("Temperature (°C)")
-            ax.set_title(f"Thermal modeling for {self.id} {self.geom_type} ")
+            ax.set_title(f"Thermal modeling for {self.id} {self.geom_type} body")
             ax.legend()
             plt.tight_layout()
             plt.show(block=False)
+        elif len(sample) == 3:
+            # 2D case: create subplots for each time
+            num_plots = len(self.results)
+            cols = int(np.ceil(np.sqrt(num_plots)))
+            rows = int(np.ceil(num_plots / cols))
+            fig, axes = plt.subplots(rows, cols, figsize=(cols * 4, rows * 3))
+            axes = np.array(axes).flatten()
+            for i, (t, (X, Y, T)) in enumerate(self.results.items()):
+                ax = axes[i]
+                cp = ax.contourf(X, Y, T, levels=20, cmap="viridis")
+                fig.colorbar(cp, ax=ax)
+                ax.set_title(f"Time = {t} years")
+                ax.set_xlabel("x (m)")
+                ax.set_ylabel("y (m)")
+            # Turn off extra subplots if necessary
+            for j in range(i+1, len(axes)):
+                axes[j].axis('off')
+            fig.suptitle(f"Thermal modeling for {self.id} {self.geom_type} body", fontsize=16)
+            plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+            plt.show(block=False)
+        else:
+            print("Unexpected result format.")
 
     def save_plot_as_pdf(self):
         """
@@ -164,12 +195,16 @@ class Visualization(QDialog):
         pdf_filename = os.path.abspath(pdf_filename)
 
         fig, ax = plt.subplots()
-        for time, (x, T) in self.results.items():
-            ax.plot(x, T, label=f"Time = {time} years")
-        ax.set_xlabel("Distance from center (m)")
-        ax.set_ylabel("Temperature (°C)")
-        ax.set_title(f"Thermal modeling for {self.id}  {self.geom_type}")
-        ax.legend()
+        sample = next(iter(self.results.values()))
+        if len(sample) == 2:
+            for t, (x, T) in self.results.items():
+                ax.plot(x, T, label=f"Time = {t} years")
+            ax.set_xlabel("Distance from center (m)")
+            ax.set_ylabel("Temperature (°C)")
+            ax.set_title(f"Thermal modeling for {self.id} {self.geom_type} body")
+            ax.legend()
+        else:
+            ax.text(0.5, 0.5, "2D plot - use Save Grid as PDF", ha="center", va="center")
         plt.tight_layout()
         fig.savefig(pdf_filename, format="pdf")
         plt.close(fig)
@@ -209,18 +244,14 @@ class Visualization(QDialog):
          - If there is exactly one real plot stored, ensure that a placeholder is appended.
          - Otherwise, remove any placeholder.
         """
-        # Get only real (non-placeholder) plots.
         real_plots = [fig for fig in self.stored_plots if not self.is_placeholder(fig)]
         if len(real_plots) == 1:
-            # If there is exactly one real plot and no placeholder, add one.
             if not any(self.is_placeholder(fig) for fig in self.stored_plots):
                 placeholder_fig = self.create_placeholder()
                 self.stored_plots = real_plots + [placeholder_fig]
             else:
-                # Already contains a placeholder.
                 self.stored_plots = real_plots + [fig for fig in self.stored_plots if self.is_placeholder(fig)]
         else:
-            # For 0 or >=2 real plots, remove any placeholder.
             self.stored_plots = real_plots
 
     def store_plot(self):
@@ -234,25 +265,27 @@ class Visualization(QDialog):
             return
 
         max_slots = self.grid_rows * self.grid_cols
-
-        # Remove any existing placeholder.
         self.stored_plots = [fig for fig in self.stored_plots if not self.is_placeholder(fig)]
-
         if len(self.stored_plots) >= max_slots:
             QMessageBox.warning(self, "Limit Reached", f"Maximum number of plots ({max_slots}) reached.")
             return
 
         fig, ax = plt.subplots(figsize=(4, 4))
-        for time, (x, T) in self.results.items():
-            ax.plot(x, T, label=f"Time = {time} years")
-        ax.set_xlabel("Distance from center (m)")
-        ax.set_ylabel("Temperature (°C)")
-        ax.set_title(f"{self.id}")
-        ax.legend()
+        sample = next(iter(self.results.values()))
+        if len(sample) == 2:
+            for t, (x, T) in self.results.items():
+                ax.plot(x, T, label=f"Time = {t} years")
+            ax.set_xlabel("Distance from center (m)")
+            ax.set_ylabel("Temperature (°C)")
+            ax.set_title(f"{self.id}")
+            ax.legend()
+        else:
+            ax.text(0.5, 0.5, "2D Plot", fontsize=12, ha="center", va="center")
+            ax.axis("off")
         plt.tight_layout()
 
         self.stored_plots.append(fig)
-        self.manage_placeholder()  # Automatically add or remove placeholder as needed.
+        self.manage_placeholder()
         self.update_store_button_text()
         self.update_preview()
         print(f"Plot stored. Total stored plots: {len(self.stored_plots)}")
@@ -261,12 +294,9 @@ class Visualization(QDialog):
         """
         Updates the text of the store button to indicate the number of used slots.
         """
-        # Count only real plots (exclude placeholders)
         real_count = len([fig for fig in self.stored_plots if not self.is_placeholder(fig)])
         max_slots = self.grid_rows * self.grid_cols
         self.store_button.setText(f"Store Plot - {real_count}/{max_slots} slots used")
-
-        # Show Next Input button only if at least one real plot is stored
         if real_count >= 1:
             self.next_input_button.setVisible(True)
         else:
@@ -277,7 +307,6 @@ class Visualization(QDialog):
         Called when the 'Next Input' button is clicked.
         Emits a signal to indicate that main inputs should be cleared, then closes this window.
         """
-        # Emit the signal so that the main module can clear its inputs.
         self.next_input_signal.emit()
         self.close()
 
@@ -285,7 +314,6 @@ class Visualization(QDialog):
         """
         Updates the preview grid layout with thumbnails of the stored plots.
         """
-        # Clear existing preview widgets.
         for i in reversed(range(self.preview_layout.count())):
             widget = self.preview_layout.itemAt(i).widget()
             if widget:
@@ -355,8 +383,6 @@ class Visualization(QDialog):
             pdf_filename += ".pdf"
         pdf_filename = os.path.abspath(pdf_filename)
 
-        n = len(self.stored_plots)
-        # Determine grid dimensions based on number of real plots.
         real_count = len([fig for fig in self.stored_plots if not self.is_placeholder(fig)])
         if real_count <= 4:
             rows, cols = 2, 2
@@ -379,7 +405,7 @@ class Visualization(QDialog):
             else:
                 ax.axis('off')
 
-        fig.suptitle(f"Thermal Model Results Grid ", fontsize=16)
+        fig.suptitle(f"Thermal Model Results Grid", fontsize=16)
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         fig.savefig(pdf_filename, format="pdf")
         plt.close(fig)
@@ -393,6 +419,21 @@ if __name__ == "__main__":
     window = Visualization()
 
     # Example data for testing.
+    # Uncomment one of the following examples:
+    # For 1D results:
+    # sample_results = {
+    #     1: ([0, 10, 20, 30], [100, 90, 80, 70]),
+    #     2: ([0, 10, 20, 30], [95, 85, 75, 65])
+    # }
+    # For 2D results (e.g., pipe-like):
+    # import numpy as np
+    # x = np.linspace(-30, 30, 100)
+    # y = np.linspace(-30, 30, 100)
+    # X, Y = np.meshgrid(x, y)
+    # T = 100 * np.exp(-((X/20)**2 + (Y/30)**2))
+    # sample_results = {1: (X, Y, T)}
+    
+    # Usando o exemplo 1D:
     sample_results = {
         1: ([0, 10, 20, 30], [100, 90, 80, 70]),
         2: ([0, 10, 20, 30], [95, 85, 75, 65])

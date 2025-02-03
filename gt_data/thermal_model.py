@@ -129,64 +129,66 @@ class ThermalModel:
 
     def run_plug(self, data, T0, K1, k, K, k1, g, l, d, time):
         """
-        Analytical solution for a plug-like (cylindrical) body.
+        Analytical solution for a plug-like (pipe-like) body with a rectangular cross section.
         
-        This solution is for an infinite circular cylinder of radius d that has an
-        initial uniform temperature T0 (for r < d) and zero temperature outside.
+        This solution corresponds to an infinite cylinder (pipe-like intrusion) with a rectangular
+        cross section defined by -d1 < x < d1 and -d2 < y < d2. The initial temperature is T0
+        inside and zero outside. The temperature distribution is given by Carslaw & Jaeger (1959, §2.2 (9)):
         
-        The temperature at a radial distance r and time t is given by:
+            T = T0 * φ(ξ₁, τ₁) * φ(ξ₂, τ₂)
         
-            T(r,t) = T0 * [ 1 - 2 * Σ_{m=1}^∞ { J0(λ_m * r/d) / (λ_m * J1(λ_m)) * exp(-λ_m² * κ t/d²) } ]
-        
-        This formulation is based on Equation (14) of Jaeger (1964) (as given by Carslaw and Jaeger, §10.3 (12)).
-        It is derived by representing the solution in a series expansion in Bessel functions:
-        
-            - J0 and J1 are the Bessel functions of the first kind of order 0 and 1, respectively.
-            - λ_m are the positive zeros of J0.
-            - κ (here given by k) is the thermal diffusivity.
+        where:
+            φ(ξ, τ) = 1/2 [erf((ξ+1)/(2√τ)) - erf((ξ-1)/(2√τ))]
+            ξ₁ = x / d₁,   τ₁ = κ t / d₁²,
+            ξ₂ = y / d₂,   τ₂ = κ t / d₂²,
+            with κ given by parameter k.
         
         Parameters:
-            - d: radius of the cylinder.
-            - time: list or array of times at which the solution is computed.
-            - r: radial coordinate (evaluated on a radial grid).
+            T0   : Initial temperature inside the intrusion.
+            k    : Thermal diffusivity (κ).
+            d    : Either a single value (then d1 = d2 = d) or a tuple/list (d1, d2).
+            time : List or array of times at which to compute the solution.
+            
+        Returns:
+            results : A dictionary where each key is a time t and the corresponding value is
+                    a tuple (X, Y, T) with the spatial grid (X, Y) and the temperature distribution T.
         """
-        # Check for 'time' in data
+        # Check for the time parameter (if not provided via data)
         if time is None:
             time = data.get("time", None)
             if time is None:
                 raise ValueError("Parameter 'time' (list of times) is required for Plug-like body.")
-        # Check for 'd' in data
-        if d is None:
-            d = data.get("d", None)
-            if d is None:
-                raise ValueError("Parameter 'd' (cylinder radius) is required for Plug-like body.")
         
+        # Determine d1 and d2
+        if isinstance(d, (list, tuple)):
+            if len(d) < 2:
+                raise ValueError("For a plug-like body, d should be provided as a tuple/list with two elements (d1, d2).")
+            d1, d2 = d[0], d[1]
+        else:
+            d1 = d2 = d
+
         results = {}
-        # Define a radial grid from 0 to 3*d with 100 points.
-        r_values = np.linspace(0, 3 * d, 100)
-        
-        # Number of terms in the series expansion (adjust M for accuracy)
-        M = 20
-        # Compute the first M positive zeros of the Bessel function J0.
-        lambda_zeros = jn_zeros(0, M)
+        # Define a spatial grid for x and y: for example, from -3*d1 to 3*d1 for x and -3*d2 to 3*d2 for y.
+        x_values = np.linspace(-3*d1, 3*d1, 100)
+        y_values = np.linspace(-3*d2, 3*d2, 100)
+        X, Y = np.meshgrid(x_values, y_values)
         
         for t in time:
-            # Precompute the exponential factors for each term in the series
-            exp_factors = np.exp(- (lambda_zeros**2) * k * t / (d**2))
+            # Compute dimensionless times
+            tau1 = k * t / (d1**2)
+            tau2 = k * t / (d2**2)
+            # Compute dimensionless spatial coordinates
+            xi1 = X / d1
+            xi2 = Y / d2
+
+            # Compute φ for each coordinate direction:
+            phi1 = 0.5 * (erf((xi1 + 1) / (2 * np.sqrt(tau1))) - erf((xi1 - 1) / (2 * np.sqrt(tau1))))
+            phi2 = 0.5 * (erf((xi2 + 1) / (2 * np.sqrt(tau2))) - erf((xi2 - 1) / (2 * np.sqrt(tau2))))
             
-            # Initialize the temperature profile as an array of ones
-            T_profile = np.ones_like(r_values)
+            # The temperature distribution is the product multiplied by T0
+            T_profile = T0 * phi1 * phi2
             
-            # Sum over the series terms (subtracting from 1)
-            for m in range(M):
-                lambda_m = lambda_zeros[m]
-                term = (j0(lambda_m * r_values / d) / (lambda_m * j1(lambda_m))) * exp_factors[m]
-                T_profile -= 2 * term
-            
-            # Multiply by T0 to obtain the final temperature profile
-            T_profile *= T0
-            
-            results[t] = (r_values, T_profile)
+            results[t] = (X, Y, T_profile)
         
         return results
 
