@@ -1,9 +1,9 @@
 from PyQt5.QtWidgets import (
     QDialog, QFormLayout, QLabel, QLineEdit, QPushButton, QComboBox, 
-    QInputDialog, QMessageBox
+    QInputDialog, QMessageBox, QCheckBox
 )
 from PyQt5.QtCore import Qt
-from gt_data.data_manager import data_manager  # Importa a instância global do DataManager
+from gt_data.data_manager import data_manager  
 
 class GeometrySelectionDialog(QDialog):
     def __init__(self):
@@ -18,7 +18,7 @@ class GeometrySelectionDialog(QDialog):
         # Add the default option and the stored IDs.
         self.id_input.addItem("<NEW ID>")
         self.id_input.addItems(data_manager.get_ids())
-        # Set the field to empty initially.
+        # Initially, the field is empty.
         self.id_input.setCurrentText("")
         self.id_input.currentTextChanged.connect(self.on_id_changed)
         self.id_input.lineEdit().textEdited.connect(self.on_text_edited)
@@ -53,7 +53,6 @@ class GeometrySelectionDialog(QDialog):
         self.id_input.addItem("<NEW ID>")
         for stored_id in data_manager.get_ids():
             self.id_input.addItem(stored_id)
-        # Restore the current text if it is not "<NEW ID>"
         if current_text and current_text != "<NEW ID>":
             index = self.id_input.findText(current_text, Qt.MatchFixedString)
             if index >= 0:
@@ -65,13 +64,12 @@ class GeometrySelectionDialog(QDialog):
 
     def on_id_changed(self, selected_id):
         """
-        If the user selects "<NEW ID>", clear the field so the user can type a new ID.
+        If the user selects "<NEW ID>", clear the field so a new ID can be entered.
         Otherwise, load the stored data for the selected ID to pre-populate the fields.
         """
         if selected_id == "":
             return
         if selected_id == "<NEW ID>":
-            # Clear the field for new ID entry and show a tooltip.
             self.id_input.setEditText("")
             self.id_input.setToolTip("Please enter a new ID here.")
             self.d_input.clear()
@@ -89,7 +87,7 @@ class GeometrySelectionDialog(QDialog):
     def on_text_edited(self, text):
         """
         When the user edits the ID field, if the text is "<NEW ID>",
-        display a tooltip to indicate that the user should clear it.
+        show a tooltip indicating that the user should clear it.
         """
         if text == "<NEW ID>":
             self.id_input.setToolTip("Please clear '<NEW ID>' to enter a new ID.")
@@ -129,7 +127,7 @@ class GeometrySelectionDialog(QDialog):
 
     def is_valid_number(self, text):
         """
-        Returns True if the given text can be converted to float.
+        Returns True if the given text can be converted to a float.
         """
         try:
             float(text)
@@ -164,7 +162,7 @@ class ParameterInputDialog(QDialog):
     def __init__(self, geometry):
         super().__init__()
         self.setWindowTitle("Enter Parameters")
-        self.setGeometry(100, 100, 400, 400)
+        self.setGeometry(100, 100, 400, 500)
         layout = QFormLayout()
         self.geometry = geometry
 
@@ -176,6 +174,8 @@ class ParameterInputDialog(QDialog):
         self.g_input = QLineEdit()
         self.l_input = QLineEdit()
         self.time_input = QLineEdit()
+        # Default value for times
+        self.time_input.setText("1;10;100;1000;10000;100000;1000000;5000000;10000000")
 
         self.inputs = [
             self.T0_input,
@@ -197,6 +197,40 @@ class ParameterInputDialog(QDialog):
         layout.addRow("Depth (l):", self.l_input)
         layout.addRow("Times (semicolon separated):", self.time_input)
 
+        # Plot configuration section
+        self.auto_plot_checkbox = QCheckBox("Auto-plot configuration")
+        # Carrega os defaults de plot do DataManager.
+        plot_defaults = data_manager.get_plot_defaults()
+        auto_plot_default = plot_defaults.get("auto_plot", True)
+        self.auto_plot_checkbox.setChecked(auto_plot_default)
+        self.auto_plot_checkbox.toggled.connect(self.toggle_plot_config_fields)
+        layout.addRow(self.auto_plot_checkbox)
+
+        # Create custom plot configuration fields with descriptive labels.
+        self.x_custom_label = QLabel("Distance to mid-intrusion (plot half-range):")
+        self.x_custom_input = QLineEdit()
+        self.x_custom_input.setPlaceholderText("Enter distance for plot x-axis")
+        layout.addRow(self.x_custom_label, self.x_custom_input)
+
+        self.Tmin_label = QLabel("Minimum temperature (plot y-axis):")
+        self.Tmin_input = QLineEdit()
+        self.Tmin_input.setPlaceholderText("Enter minimum temperature for plot")
+        layout.addRow(self.Tmin_label, self.Tmin_input)
+
+        self.Tmax_label = QLabel("Maximum temperature (plot y-axis):")
+        self.Tmax_input = QLineEdit()
+        self.Tmax_input.setPlaceholderText("Enter maximum temperature for plot")
+        layout.addRow(self.Tmax_label, self.Tmax_input)
+
+        # Se o default auto_plot for True, os campos customizados são ocultos.
+        if auto_plot_default:
+            self.x_custom_label.hide()
+            self.x_custom_input.hide()
+            self.Tmin_label.hide()
+            self.Tmin_input.hide()
+            self.Tmax_label.hide()
+            self.Tmax_input.hide()
+
         self.ok_button = QPushButton("OK")
         self.ok_button.clicked.connect(self.accept)
         self.ok_button.setEnabled(False)
@@ -204,12 +238,45 @@ class ParameterInputDialog(QDialog):
 
         self.setLayout(layout)
 
-        # Connect signals for validation
+        # Connect signals for validation.
         for input_field in self.inputs:
             input_field.textChanged.connect(self.check_inputs)
+        self.x_custom_input.textChanged.connect(self.check_inputs)
+        self.Tmin_input.textChanged.connect(self.check_inputs)
+        self.Tmax_input.textChanged.connect(self.check_inputs)
+
+    def toggle_plot_config_fields(self, checked):
+        """
+        Shows or hides the custom plot configuration fields based on the checkbox state.
+        """
+        if checked:  # Auto-plot enabled: hide custom fields.
+            self.x_custom_label.hide()
+            self.x_custom_input.hide()
+            self.Tmin_label.hide()
+            self.Tmin_input.hide()
+            self.Tmax_label.hide()
+            self.Tmax_input.hide()
+        else:  # Auto-plot disabled: show custom fields.
+            self.x_custom_label.show()
+            self.x_custom_input.show()
+            self.Tmin_label.show()
+            self.Tmin_input.show()
+            self.Tmax_label.show()
+            self.Tmax_input.show()
+        try:
+            data_manager.set_plot_defaults({
+                "auto_plot": self.auto_plot_checkbox.isChecked(),
+                "x_custom": float(self.x_custom_input.text()) if self.x_custom_input.text() else None,
+                "Tmin": float(self.Tmin_input.text()) if self.Tmin_input.text() else None,
+                "Tmax": float(self.Tmax_input.text()) if self.Tmax_input.text() else None
+            })
+        except ValueError:
+            pass
+
+        self.check_inputs()
 
     def set_parameters(self, parameters):
-        """Fill fields with stored parameters."""
+        """Fills the fields with stored parameters and loads plot defaults from DataManager."""
         self.T0_input.setText(str(parameters.get("T0", "")))
         self.K1_input.setText(str(parameters.get("K1", "")))
         self.k_input.setText(str(parameters.get("k", "")))
@@ -218,11 +285,31 @@ class ParameterInputDialog(QDialog):
         self.g_input.setText(str(parameters.get("g", "")))
         self.l_input.setText(str(parameters.get("l", "")))
         self.time_input.setText(";".join(map(str, parameters.get("time", []))))
+        
+        # Load plot defaults from DataManager (ignoring any plot-related keys in 'parameters')
+        plot_defaults = data_manager.get_plot_defaults()
+        print("DEBUG: Loaded plot_defaults from DataManager:", plot_defaults)  # Debug print
+        auto_plot_default = plot_defaults.get("auto_plot", True)
+        self.auto_plot_checkbox.setChecked(auto_plot_default)
+        if not auto_plot_default:
+            # Se os defaults estiverem definidos, preenche os campos customizados.
+            x_custom = plot_defaults.get("x_custom", "")
+            Tmin = plot_defaults.get("Tmin", "")
+            Tmax = plot_defaults.get("Tmax", "")
+            print("DEBUG: Setting custom plot fields: x_custom =", x_custom, "Tmin =", Tmin, "Tmax =", Tmax)  # Debug
+            self.x_custom_input.setText(str(x_custom) if x_custom is not None else "")
+            self.Tmin_input.setText(str(Tmin) if Tmin is not None else "")
+            self.Tmax_input.setText(str(Tmax) if Tmax is not None else "")
+        else:
+            # Se auto-plot estiver ativado, limpa os campos customizados.
+            self.x_custom_input.setText("")
+            self.Tmin_input.setText("")
+            self.Tmax_input.setText("")
+        self.toggle_plot_config_fields(self.auto_plot_checkbox.isChecked())
 
     def check_inputs(self):
         """
-        Validate that all visible fields are filled and contain valid numbers.
-        Enable the OK button if valid.
+        Validates that all visible fields are filled and contain valid numbers.
         """
         all_filled = all(input_field.text().strip() for input_field in self.inputs if input_field.isVisible())
         all_valid = all(self.is_valid_number(input_field.text()) for input_field in self.inputs[:-1] if input_field.isVisible())
@@ -234,7 +321,18 @@ class ParameterInputDialog(QDialog):
         except ValueError:
             all_times_valid = False
 
-        self.ok_button.setEnabled(all_filled and all_valid and all_times_valid)
+        if not self.auto_plot_checkbox.isChecked():
+            extra_filled = (self.x_custom_input.text().strip() != "" and 
+                            self.Tmin_input.text().strip() != "" and 
+                            self.Tmax_input.text().strip() != "")
+            extra_valid = (self.is_valid_number(self.x_custom_input.text()) and
+                           self.is_valid_number(self.Tmin_input.text()) and
+                           self.is_valid_number(self.Tmax_input.text()))
+        else:
+            extra_filled = True
+            extra_valid = True
+
+        self.ok_button.setEnabled(all_filled and all_valid and all_times_valid and extra_filled and extra_valid)
 
     def is_valid_number(self, text):
         try:
@@ -244,7 +342,7 @@ class ParameterInputDialog(QDialog):
             return False
 
     def get_parameters(self):
-        """Return the parameters entered by the user."""
+        """Returns the parameters entered by the user."""
         times = [float(t.strip()) for t in self.time_input.text().split(';') if t.strip()]
         parameters = {
             "geometry": self.geometry,
@@ -255,6 +353,11 @@ class ParameterInputDialog(QDialog):
             "k1": float(self.k1_input.text()),
             "g": float(self.g_input.text()),
             "l": float(self.l_input.text()),
-            "time": times
+            "time": times,
         }
+        parameters["auto_plot"] = self.auto_plot_checkbox.isChecked()
+        if not parameters["auto_plot"]:
+            parameters["x_custom"] = float(self.x_custom_input.text())
+            parameters["Tmin"] = float(self.Tmin_input.text())
+            parameters["Tmax"] = float(self.Tmax_input.text())
         return parameters

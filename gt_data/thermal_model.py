@@ -9,7 +9,7 @@ class ThermalModel:
         Main entry point for running the thermal model.
         
         Parameters:
-            data    : dictionary containing additional data (e.g., 'method', 'time', 'd')
+            data    : dictionary containing additional data (e.g., 'method', 'time', 'd', 'auto_plot', etc.)
             geometry: string indicating the geometry ("Tabular-like body", 
                       "Spheric-like body", "Plug-like body", or "Cylindrical-like body")
             T0      : initial temperature of the intrusion
@@ -63,15 +63,29 @@ class ThermalModel:
         Tecx = g * l
 
         results = {}
-        # Define a spatial grid for x, e.g., from -3*d to 3*d with 100 points.
-        x_values = np.linspace(-3 * d_value, 3 * d_value, 100)
+        # Choose spatial grid based on auto_plot configuration.
+        if not data.get("auto_plot", True):
+            # Manual mode: use custom x half-range provided by the user.
+            x_custom = data.get("x_custom", None)
+            if x_custom is None:
+                raise ValueError("Custom x value must be provided when auto_plot is disabled.")
+            x_values = np.linspace(-x_custom, x_custom, 100)
+        else:
+            # Automatic mode: x is tied to d.
+            x_values = np.linspace(-3 * d_value, 3 * d_value, 100)
         
         for t in time:
-            # Calculate the temperature T(x,t) using the vectorized erf from scipy.special
             factor = 2.0 * sqrt(k * t)
             T_profile = ((T0 - Tecx) / 2.0) * (
                 erf((x_values + d_value) / factor) - erf((x_values - d_value) / factor)
             ) + Tecx
+            # In manual mode, clip the temperature profile between Tmin and Tmax.
+            if not data.get("auto_plot", True):
+                Tmin = data.get("Tmin", None)
+                Tmax = data.get("Tmax", None)
+                if Tmin is None or Tmax is None:
+                    raise ValueError("Tmin and Tmax must be provided when auto_plot is disabled.")
+                T_profile = np.clip(T_profile, Tmin, Tmax)
             results[t] = (x_values, T_profile)
         
         return results
@@ -102,33 +116,42 @@ class ThermalModel:
 
         results = {}
         for t in time:
-            # Create a spatial grid for x; using integer steps (you might use np.linspace for higher resolution)
-            x = [n for n in range(-2 * int(d), 2 * int(d), 1) if n != 0]
+            # Choose spatial grid based on auto_plot configuration.
+            if not data.get("auto_plot", True):
+                x_custom = data.get("x_custom", None)
+                if x_custom is None:
+                    raise ValueError("Custom x value must be provided when auto_plot is disabled.")
+                x_values = np.linspace(-x_custom, x_custom, 100)
+            else:
+                x_values = np.linspace(-2 * d, 2 * d, 100)
             
             # Compute dimensionless spatial coordinate ε = x/d
-            epsilon = [xi / d for xi in x]
+            epsilon = x_values / d
             # Compute dimensionless time τ = (κ * t) / d²
             tau = (k * t) / (d ** 2)
             
             # Calculate ψ(ξ,τ) using the expression from Jaeger (1964)
-            # (See Equation (16) of Jaeger (1964), using standard error functions and exponentials)
             Psi = [
                 0.5 * (
-                    erf((epsilon_i + 1) / (2 * sqrt(tau))) -
-                    erf((epsilon_i - 1) / (2 * sqrt(tau))) -
-                    (2 * sqrt(tau) / (epsilon_i * sqrt(pi))) *
-                    (
-                        exp(-((epsilon_i - 1) ** 2) / (4 * tau)) -
-                        exp(-((epsilon_i + 1) ** 2) / (4 * tau))
-                    )
+                    erf((eps + 1) / (2 * sqrt(tau))) -
+                    erf((eps - 1) / (2 * sqrt(tau))) -
+                    (2 * sqrt(tau) / (eps * sqrt(pi))) *
+                    (exp(-((eps - 1) ** 2) / (4 * tau)) - exp(-((eps + 1) ** 2) / (4 * tau)))
                 )
-                for epsilon_i in epsilon
+                for eps in epsilon
             ]
             
-            # Compute the temperature profile T(x,t)
-            T_profile = [(T0 - Tecx) * psi + Tecx  for psi in Psi]
+            T_profile = [(T0 - Tecx) * psi + Tecx for psi in Psi]
             
-            results[t] = (x, T_profile)
+            # In manual mode, clip the temperature profile between Tmin and Tmax.
+            if not data.get("auto_plot", True):
+                Tmin = data.get("Tmin", None)
+                Tmax = data.get("Tmax", None)
+                if Tmin is None or Tmax is None:
+                    raise ValueError("Tmin and Tmax must be provided when auto_plot is disabled.")
+                T_profile = np.clip(T_profile, Tmin, Tmax)
+            
+            results[t] = (x_values, T_profile)
         
         return results
 
@@ -156,7 +179,7 @@ class ThermalModel:
             
         Returns:
             results : A dictionary where each key is a time t and the corresponding value is
-                    a tuple (X, Y, T) with the spatial grid (X, Y) and the temperature distribution T.
+                      a tuple (X, Y, T) with the spatial grid (X, Y) and the temperature distribution T.
         """
         # Check for the time parameter (if not provided via data)
         if time is None:
@@ -176,25 +199,36 @@ class ThermalModel:
         Tecx = g * l
 
         results = {}
-        # Define a spatial grid for x and y: for example, from -3*d1 to 3*d1 for x and -3*d2 to 3*d2 for y.
-        x_values = np.linspace(-3*d1, 3*d1, 100)
-        y_values = np.linspace(-3*d2, 3*d2, 100)
+        # Choose spatial grid based on auto_plot configuration.
+        if not data.get("auto_plot", True):
+            x_custom = data.get("x_custom", None)
+            if x_custom is None:
+                raise ValueError("Custom x value must be provided when auto_plot is disabled.")
+            x_values = np.linspace(-x_custom, x_custom, 100)
+            y_values = np.linspace(-x_custom, x_custom, 100)
+        else:
+            x_values = np.linspace(-3*d1, 3*d1, 100)
+            y_values = np.linspace(-3*d2, 3*d2, 100)
         X, Y = np.meshgrid(x_values, y_values)
         
         for t in time:
-            # Compute dimensionless times
             tau1 = k * t / (d1**2)
             tau2 = k * t / (d2**2)
-            # Compute dimensionless spatial coordinates
             xi1 = X / d1
             xi2 = Y / d2
 
-            # Compute φ for each coordinate direction:
             phi1 = 0.5 * (erf((xi1 + 1) / (2 * np.sqrt(tau1))) - erf((xi1 - 1) / (2 * np.sqrt(tau1))))
             phi2 = 0.5 * (erf((xi2 + 1) / (2 * np.sqrt(tau2))) - erf((xi2 - 1) / (2 * np.sqrt(tau2))))
             
-            # The temperature distribution is the product multiplied by T0
             T_profile = (T0 - Tecx) * phi1 * phi2 + Tecx
+            
+            # In manual mode, clip the temperature distribution between Tmin and Tmax.
+            if not data.get("auto_plot", True):
+                Tmin = data.get("Tmin", None)
+                Tmax = data.get("Tmax", None)
+                if Tmin is None or Tmax is None:
+                    raise ValueError("Tmin and Tmax must be provided when auto_plot is disabled.")
+                T_profile = np.clip(T_profile, Tmin, Tmax)
             
             results[t] = (X, Y, T_profile)
         

@@ -62,6 +62,9 @@ class Visualization(QDialog):
         self.id = ""
         self.geom_type = ""
         self.results = None
+        # Optional plot configuration dictionary (set externally)
+        # Expected keys: "auto_plot" (bool), "x_custom", "Tmin", "Tmax"
+        self.plot_config = None
 
         # List to store plots (up to 9).
         self.stored_plots = []
@@ -98,7 +101,8 @@ class Visualization(QDialog):
 
         self.next_input_button = QPushButton("Next Input")
         self.next_input_button.clicked.connect(self.next_input)
-        self.next_input_button.setVisible(False)
+        # Always visible.
+        self.next_input_button.setVisible(True)
         layout.addWidget(self.next_input_button)
 
         self.setLayout(layout)
@@ -113,7 +117,7 @@ class Visualization(QDialog):
             results (dict): Dictionary containing the model results.
                 For 1D data: {time: (x, T)}
                 For 2D data: {time: (X, Y, T)}
-            geom_type (str): The type of geometry chosen (e.g., "Spheric-like body", "Tabular-like body", "Plug-like body").
+            geom_type (str): The type of geometry chosen.
         """
         self.results = results
         self.geom_type = geom_type
@@ -133,12 +137,13 @@ class Visualization(QDialog):
         
         If each result tuple has 2 elements, a 1D line plot is produced.
         If it has 3 elements (X, Y, T), a contour plot is produced for each time.
+        In manual mode (auto_plot disabled), the x-axis and y-axis limits (or the color scale for 2D plots)
+        are fixed according to the user's configuration.
         """
         if self.results is None:
             return
 
         sample = next(iter(self.results.values()))
-        # Check if results are 1D (tuple with 2 elements) or 2D (tuple with 3 elements)
         if len(sample) == 2:
             # 1D case
             fig, ax = plt.subplots()
@@ -148,6 +153,20 @@ class Visualization(QDialog):
             ax.set_ylabel("Temperature (°C)")
             ax.set_title(f"Thermal modeling for {self.id} {self.geom_type}")
             ax.legend()
+            # If manual configuration is provided and auto_plot is disabled, fix the axis limits.
+            if self.plot_config is not None and not self.plot_config.get("auto_plot", True):
+                try:
+                    x_custom = float(self.plot_config.get("x_custom"))
+                    Tmin = float(self.plot_config.get("Tmin"))
+                    Tmax = float(self.plot_config.get("Tmax"))
+                    print("Applying custom limits for 1D plot: x_custom =", x_custom, " Tmin =", Tmin, " Tmax =", Tmax)
+                    ax.set_autoscale_on(False)
+                    ax.set_xlim(-x_custom, x_custom)
+                    ax.set_ylim(Tmin, Tmax)
+                    # Force a draw to update the limits
+                    fig.canvas.draw()
+                except Exception as e:
+                    print("Error applying custom limits for 1D plot:", e)
             plt.tight_layout()
             plt.show(block=False)
         elif len(sample) == 3:
@@ -164,7 +183,17 @@ class Visualization(QDialog):
                 ax.set_title(f"Time = {t} years")
                 ax.set_xlabel("x (m)")
                 ax.set_ylabel("y (m)")
-            # Turn off extra subplots if necessary
+                if self.plot_config is not None and not self.plot_config.get("auto_plot", True):
+                    try:
+                        Tmin = float(self.plot_config.get("Tmin"))
+                        Tmax = float(self.plot_config.get("Tmax"))
+                        cp.set_clim(Tmin, Tmax)
+                        x_custom = float(self.plot_config.get("x_custom"))
+                        ax.set_xlim(-x_custom, x_custom)
+                        ax.set_ylim(-x_custom, x_custom)
+                        print("Applying custom limits for 2D plot: x_custom =", x_custom, " Tmin =", Tmin, " Tmax =", Tmax)
+                    except Exception as e:
+                        print("Error applying custom limits for 2D plot:", e)
             for j in range(i+1, len(axes)):
                 axes[j].axis('off')
             fig.suptitle(f"Thermal modeling for {self.id} {self.geom_type}", fontsize=16)
@@ -203,6 +232,17 @@ class Visualization(QDialog):
             ax.set_ylabel("Temperature (°C)")
             ax.set_title(f"Thermal modeling for {self.id} {self.geom_type}")
             ax.legend()
+            if self.plot_config is not None and not self.plot_config.get("auto_plot", True):
+                try:
+                    x_custom = float(self.plot_config.get("x_custom"))
+                    Tmin = float(self.plot_config.get("Tmin"))
+                    Tmax = float(self.plot_config.get("Tmax"))
+                    ax.set_autoscale_on(False)
+                    ax.set_xlim(-x_custom, x_custom)
+                    ax.set_ylim(Tmin, Tmax)
+                    print("Applying custom limits for PDF plot: x_custom =", x_custom, " Tmin =", Tmin, " Tmax =", Tmax)
+                except Exception as e:
+                    print("Error applying custom limits on PDF plot:", e)
         else:
             ax.text(0.5, 0.5, "2D plot - use Save Grid as PDF", ha="center", va="center")
         plt.tight_layout()
@@ -297,10 +337,8 @@ class Visualization(QDialog):
         real_count = len([fig for fig in self.stored_plots if not self.is_placeholder(fig)])
         max_slots = self.grid_rows * self.grid_cols
         self.store_button.setText(f"Store Plot - {real_count}/{max_slots} slots used")
-        if real_count >= 1:
-            self.next_input_button.setVisible(True)
-        else:
-            self.next_input_button.setVisible(False)
+        # Always show the next input button.
+        self.next_input_button.setVisible(True)
             
     def next_input(self):
         """
@@ -418,28 +456,15 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = Visualization()
 
-    # Example data for testing.
-    # Uncomment one of the following examples:
-    # For 1D results:
-    # sample_results = {
-    #     1: ([0, 10, 20, 30], [100, 90, 80, 70]),
-    #     2: ([0, 10, 20, 30], [95, 85, 75, 65])
-    # }
-    # For 2D results (e.g., pipe-like):
-    # import numpy as np
-    # x = np.linspace(-30, 30, 100)
-    # y = np.linspace(-30, 30, 100)
-    # X, Y = np.meshgrid(x, y)
-    # T = 100 * np.exp(-((X/20)**2 + (Y/30)**2))
-    # sample_results = {1: (X, Y, T)}
-    
-    # Usando o exemplo 1D:
+    # Example data for testing (1D results):
     sample_results = {
         1: ([0, 10, 20, 30], [100, 90, 80, 70]),
         2: ([0, 10, 20, 30], [95, 85, 75, 65])
     }
     window.set_data(sample_results, "Tabular-like body")
     window.set_id("1")
+    # To test manual mode, uncomment the following line:
+    # window.plot_config = {"auto_plot": False, "x_custom": 15, "Tmin": 0, "Tmax": 200}
 
     window.show()
     sys.exit(app.exec_())

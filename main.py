@@ -2,7 +2,7 @@ import sys
 import json
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QAction, QLabel,
-    QMessageBox, QDialog, QLineEdit, QRadioButton, QButtonGroup, QFileDialog
+    QMessageBox, QDialog, QLineEdit, QRadioButton, QButtonGroup, QFileDialog, QFormLayout, QCheckBox, QHBoxLayout
 )
 from PyQt5.QtGui import QIcon, QPixmap
 from PyQt5.QtCore import Qt, QTimer
@@ -127,6 +127,11 @@ class MainWindow(QMainWindow):
         self.save_action.triggered.connect(self.save_data)
         file_menu.addAction(self.save_action)
 
+        # Enable setting plot configuration default
+        set_plot_defaults_action = QAction("Set Plot Configuration Defaults", self)
+        set_plot_defaults_action.triggered.connect(self.set_plot_defaults)
+        file_menu.addAction(set_plot_defaults_action)
+
         exit_action = QAction("Exit", self)
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
@@ -136,6 +141,88 @@ class MainWindow(QMainWindow):
         help_action = QAction("View README on GitHub", self)
         help_action.triggered.connect(self.viewReadme)
         help_menu.addAction(help_action)
+    
+    def set_plot_defaults(self):
+        """
+        Opens a dialog to set default plot configuration values.
+        These values are stored in the DataManager.
+        """
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Set Plot Configuration Defaults")
+        dialog.setGeometry(200, 200, 400, 300)
+        
+        layout = QFormLayout()
+        
+        # Auto-plot checkbox
+        auto_plot_checkbox = QCheckBox("Auto-plot configuration")
+        auto_plot_checkbox.setChecked(data_manager.get_plot_defaults().get("auto_plot", True))
+        layout.addRow("Enable Auto-Plot:", auto_plot_checkbox)
+        
+        # Custom x value input
+        x_custom_input = QLineEdit()
+        x_custom_input.setText(str(data_manager.get_plot_defaults().get("x_custom", "")))
+        x_custom_input.setPlaceholderText("Enter custom -x to +x range")
+        layout.addRow("Custom X Value:", x_custom_input)
+        
+        # Tmin input
+        Tmin_input = QLineEdit()
+        Tmin_input.setText(str(data_manager.get_plot_defaults().get("Tmin", "")))
+        Tmin_input.setPlaceholderText("Enter minimum Y value")
+        layout.addRow("Minimum Y value (Tmin):", Tmin_input)
+        
+        # Tmax input
+        Tmax_input = QLineEdit()
+        Tmax_input.setText(str(data_manager.get_plot_defaults().get("Tmax", "")))
+        Tmax_input.setPlaceholderText("Enter maximum Y value")
+        layout.addRow("Maximum Y value (Tmax):", Tmax_input)
+        
+        # OK and Cancel buttons
+        ok_button = QPushButton("OK")
+        cancel_button = QPushButton("Cancel")
+        
+        button_layout = QHBoxLayout()
+        button_layout.addWidget(ok_button)
+        button_layout.addWidget(cancel_button)
+        
+        layout.addRow(button_layout)
+        
+        dialog.setLayout(layout)
+        
+        def toggle_fields(checked):
+            if checked:
+                x_custom_input.setEnabled(False)
+                Tmin_input.setEnabled(False)
+                Tmax_input.setEnabled(False)
+            else:
+                x_custom_input.setEnabled(True)
+                Tmin_input.setEnabled(True)
+                Tmax_input.setEnabled(True)
+        
+        auto_plot_checkbox.toggled.connect(toggle_fields)
+        toggle_fields(auto_plot_checkbox.isChecked())
+        
+        def save_defaults():
+            try:
+                if not auto_plot_checkbox.isChecked():
+                    float(x_custom_input.text())
+                    float(Tmin_input.text())
+                    float(Tmax_input.text())
+                data_manager.set_plot_defaults({
+                    "auto_plot": auto_plot_checkbox.isChecked(),
+                    "x_custom": float(x_custom_input.text()) if x_custom_input.text() else None,
+                    "Tmin": float(Tmin_input.text()) if Tmin_input.text() else None,
+                    "Tmax": float(Tmax_input.text()) if Tmax_input.text() else None
+                })
+                QMessageBox.information(dialog, "Success", "Default plot configuration saved successfully.")
+                dialog.accept()
+            except ValueError:
+                QMessageBox.warning(dialog, "Invalid Input", "Please enter valid numeric values for custom inputs.")
+        
+        ok_button.clicked.connect(save_defaults)
+        cancel_button.clicked.connect(dialog.reject)
+        
+        dialog.exec_()
+
 
     def save_data(self):
         """
@@ -189,17 +276,21 @@ class MainWindow(QMainWindow):
             if geometry is None:
                 return
             print("Geometry selected:", geometry, "d:", d, "ID:", id_)  # Debug print
-
             parameter_dialog = ParameterInputDialog(geometry)
+            
             # Se o ID já existir, pré-preenche os parâmetros.
             stored = data_manager.get_data(id_)
             if stored:
-                # Se o dicionário armazenado possui a chave "parameters", usamos-a;
-                # caso contrário, usamos o próprio dicionário armazenado.
                 if "parameters" in stored:
                     parameter_dialog.set_parameters(stored["parameters"])
                 else:
                     parameter_dialog.set_parameters(stored)
+            else:
+                # Para novo ID, forçamos a carregar os defaults de plot do DataManager
+                # (passando um dicionário vazio para set_parameters, assim ele ignorará os parâmetros e
+                # buscará os defaults do DataManager).
+                parameter_dialog.set_parameters({})
+            
             if parameter_dialog.exec():
                 self.parameters = parameter_dialog.get_parameters()
                 self.parameters["d"] = d
@@ -270,6 +361,15 @@ class MainWindow(QMainWindow):
         if self.results:
             self.visualization.set_data(self.results, self.data.get("geometry", "Unknown"))
             self.visualization.set_id(self.data.get("id", "Unknown"))
+            
+            # Define the graph configuration (manual or automatic)
+            self.visualization.plot_config = {
+                "auto_plot": self.parameters.get("auto_plot", True),
+                "x_custom": self.parameters.get("x_custom", None),
+                "Tmin": self.parameters.get("Tmin", None),
+                "Tmax": self.parameters.get("Tmax", None)
+            }
+            
             self.visualization.show()
         else:
             QMessageBox.warning(self, "No Results", "Run the thermal model before visualizing results.")
