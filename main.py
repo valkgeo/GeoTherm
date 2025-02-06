@@ -321,7 +321,21 @@ class MainWindow(QMainWindow):
                     d = self.parameters.get("d", None)
                     time = self.parameters["time"]
 
-                    self.results = self.thermal_model.run(self.data, geometry, T0, K1, k, K, k1, g, l, d, time)
+                    # Retrieve plot configuration from parameters
+                    plot_config = {
+                        "auto_plot": self.parameters.get("auto_plot", True),
+                        "x_custom": self.parameters.get("x_custom", None),
+                        "Tmin": self.parameters.get("Tmin", None),
+                        "Tmax": self.parameters.get("Tmax", None)
+                    }
+
+                    # Pass the plot configuration to the thermal model
+                    self.results = self.thermal_model.run(
+                        {"method": self.data['method'], "time": time, "d": d, "auto_plot": plot_config["auto_plot"],
+                        "x_custom": plot_config["x_custom"], "Tmin": plot_config["Tmin"], "Tmax": plot_config["Tmax"]},
+                        geometry, T0, K1, k, K, k1, g, l, d, time
+                    )
+
                     self.visualize_button.setEnabled(True)
                     self.visualize_button.setStyleSheet("font-size: 18px; padding: 10px; color: red;")
                     self.clear_button.setVisible(True)
@@ -331,6 +345,7 @@ class MainWindow(QMainWindow):
                     data_manager.add_or_update_data(self.parameters["id"], self.data['geometry'], self.data['d'], self.parameters)
                     print(f"Model with ID '{self.parameters['id']}' stored successfully.")
                     self.save_action.setEnabled(True)
+
                 # Outros métodos, se houver...
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"An error occurred while running the model:\n{e}")
