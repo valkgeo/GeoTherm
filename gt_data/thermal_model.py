@@ -42,7 +42,7 @@ class ThermalModel:
         """
         Analytical solution for an infinite sheet (tabular body):
         
-        T(x,t) = (T0/2) * { erf((x+d)/(2*sqrt(k*t))) - erf((x-d)/(2*sqrt(k*t))) }
+        T(x,t) = (T0/2) * { erf(((x/d)+1)/(2*sqrt(k*t/d^2))) - erf((x/d-1)/(2*sqrt(k*t/d^2))) }
         
         where:
           - T0 is the initial temperature for -d < x < d,
@@ -59,7 +59,7 @@ class ThermalModel:
         if time is None:
             raise ValueError("Parameter 'time' (list of times) is required for Tabular-like body.")
         
-        # Calculate the horst rock temperature
+        # Calculate the horst rock temperature (Tecx), that represents the reference or baseline temperature (e.g., ambient temperature)
         Tecx = g * l
 
         results = {}
@@ -69,10 +69,10 @@ class ThermalModel:
             x_custom = data.get("x_custom", None)
             if x_custom is None:
                 raise ValueError("Custom x value must be provided when auto_plot is disabled.")
-            x_values = np.linspace(-x_custom, x_custom, 100)
+            x_values = np.linspace(-x_custom, x_custom, 1000)
         else:
             # Automatic mode: x is tied to d.
-            x_values = np.linspace(-3 * d_value, 3 * d_value, 100)
+            x_values = np.linspace(-3 * d_value, 3 * d_value, 1000)
         
         for t in time:
             factor = 2.0 * sqrt(k * t)
@@ -121,9 +121,9 @@ class ThermalModel:
                 x_custom = data.get("x_custom", None)
                 if x_custom is None:
                     raise ValueError("Custom x value must be provided when auto_plot is disabled.")
-                x_values = np.linspace(-x_custom, x_custom, 100)
+                x_values = np.linspace(-x_custom, x_custom, 1000)
             else:
-                x_values = np.linspace(-2 * d, 2 * d, 100)
+                x_values = np.linspace(-2 * d, 2 * d, 1000)
             
             # Compute dimensionless spatial coordinate ε = x/d
             epsilon = x_values / d
@@ -204,11 +204,11 @@ class ThermalModel:
             x_custom = data.get("x_custom", None)
             if x_custom is None:
                 raise ValueError("Custom x value must be provided when auto_plot is disabled.")
-            x_values = np.linspace(-x_custom, x_custom, 100)
-            y_values = np.linspace(-x_custom, x_custom, 100)
+            x_values = np.linspace(-x_custom, x_custom, 1000)
+            y_values = np.linspace(-x_custom, x_custom, 1000)
         else:
-            x_values = np.linspace(-3*d1, 3*d1, 100)
-            y_values = np.linspace(-3*d2, 3*d2, 100)
+            x_values = np.linspace(-3*d1, 3*d1, 1000)
+            y_values = np.linspace(-3*d2, 3*d2, 1000)
         X, Y = np.meshgrid(x_values, y_values)
         
         for t in time:
