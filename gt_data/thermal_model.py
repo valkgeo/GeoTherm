@@ -98,7 +98,7 @@ class ThermalModel:
             sigma = (K1 * sqrt(k)) / (K * sqrt(k1))    # Equation (27) of Jaeger (1964)
             
         And the initial contact temperature:
-            Tc = sigma * T0 / (1 + sigma) + g * l      # Equation (28) of Jaeger (1964)
+            Tc = sigma * T0 / (1 + sigma)      # Equation (28) of Jaeger (1964)
             
         For each time instant t, calculates the dimensionless solution ψ(ξ,τ) and
         the temperature T = ψ * T0.
